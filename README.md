@@ -5,9 +5,9 @@
 [![License][license-src]][license-href]
 [![Nuxt][nuxt-src]][nuxt-href]
 
-Type-safe and validated server actions for Nuxt.
+Type-safe server actions for Nuxt.
 
-End-to-end type safety, input/output validation via Zod, composable middleware, and Vue composables with loading states, error handling, and optimistic updates.
+Define actions on the server with Zod validation and middleware, and call them from the client with full type inference, reactive status tracking, and field-level validation errors.
 
 ```ts
 // server/actions/create-post.ts
@@ -35,13 +35,13 @@ const { execute, data, status, validationErrors } = useAction(createPost)
 
 ## Features
 
-- **End-to-end type safety** — Input and output types flow from server to client automatically
-- **Input validation** — Zod schemas validate input before your handler runs
-- **Composable middleware** — Chain auth checks, rate limiting, logging, and more
-- **Vue composables** — `useAction` with reactive `status`, `data`, `error`, and `validationErrors`
-- **Auto route generation** — Define actions in `server/actions/`, routes are created for you
-- **H3Event access** — Full request context in middleware (headers, cookies, IP, sessions)
-- **Nuxt-native** — Auto-imports, works with Nuxt DevTools, familiar conventions
+- **End-to-end type safety** - Input and output types flow from server to client automatically
+- **Input validation** - Zod schemas validate input before your handler runs
+- **Composable middleware** - Chain auth checks, logging, and more with typed context
+- **Reactive composable** - `useAction` gives you `status`, `data`, `validationErrors`, and callbacks
+- **Auto route generation** - Drop files in `server/actions/` and routes are created for you
+- **H3Event access** - Full request context available in middleware and handlers
+- **Nuxt-native** - Auto-imports, familiar conventions, works out of the box
 
 ## Quick Setup
 
@@ -79,7 +79,7 @@ export const actionClient = createSafeActionClient({
   },
 })
 
-// Optional: create an authenticated client
+// You can also create an authenticated client by adding middleware
 export const authActionClient = actionClient
   .use(async ({ next, event }) => {
     const session = await getUserSession(event)
@@ -90,7 +90,7 @@ export const authActionClient = actionClient
 
 ### 2. Define actions
 
-Create action files in `server/actions/`. Each file should export a default action:
+Create files in `server/actions/`. Each file should default-export an action:
 
 ```ts
 // server/actions/greet.ts
@@ -112,7 +112,7 @@ export default actionClient
 <script setup lang="ts">
 import { greet } from '#safe-action/actions'
 
-const { execute, data, status, validationErrors, isExecuting, hasSucceeded } = useAction(greet, {
+const { execute, data, isExecuting, hasSucceeded, validationErrors } = useAction(greet, {
   onSuccess({ data }) {
     console.log(data.greeting) // fully typed!
   },
@@ -193,6 +193,8 @@ actionClient.use(async ({ ctx, next, event, metadata, clientInput }) => {
 })
 ```
 
+Middleware must always call `next()`. If it doesn't, the action will throw an error.
+
 ### Error handling
 
 ```ts
@@ -222,13 +224,13 @@ export default defineNuxtConfig({
 ## How it works
 
 1. You define actions in `server/actions/` using the builder chain
-2. The module scans this directory and auto-generates Nitro API routes at `/api/_actions/<name>`
-3. A typed virtual module `#safe-action/actions` provides client-side references with full type inference
+2. The module scans that directory and generates Nitro API routes at `/api/_actions/<name>`
+3. A typed virtual module (`#safe-action/actions`) provides client-side references with full type inference
 4. `useAction()` calls the generated route via `$fetch` and returns reactive state
 
 ## Inspiration
 
-Inspired by [next-safe-action](https://github.com/TheEdoRan/next-safe-action) — adapted for the Nuxt ecosystem with H3Event access, auto route generation, and Vue reactivity.
+Inspired by [next-safe-action](https://github.com/TheEdoRan/next-safe-action), adapted for the Nuxt ecosystem.
 
 ## Contributing
 
@@ -254,6 +256,9 @@ Inspired by [next-safe-action](https://github.com/TheEdoRan/next-safe-action) �
   # Run Vitest
   pnpm run test
   pnpm run test:watch
+
+  # Type check
+  pnpm run test:types
   ```
 
 </details>

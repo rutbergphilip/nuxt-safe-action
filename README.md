@@ -4,6 +4,7 @@
 [![npm downloads][npm-downloads-src]][npm-downloads-href]
 [![License][license-src]][license-href]
 [![Nuxt][nuxt-src]][nuxt-href]
+[![StackBlitz][stackblitz-src]][stackblitz-href]
 
 Type-safe server actions for Nuxt.
 
@@ -279,3 +280,6 @@ Inspired by [next-safe-action](https://github.com/TheEdoRan/next-safe-action), a
 
 [nuxt-src]: https://img.shields.io/badge/Nuxt-020420?logo=nuxt
 [nuxt-href]: https://nuxt.com
+
+[stackblitz-src]: https://developer.stackblitz.com/img/open_in_stackblitz_small.svg
+[stackblitz-href]: https://stackblitz.com/github/rutbergphilip/nuxt-safe-action/tree/main/example

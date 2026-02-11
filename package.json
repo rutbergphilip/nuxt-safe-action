@@ -1,6 +1,6 @@
 {
   "name": "nuxt-safe-action",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Type-safe and validated server actions for Nuxt",
   "repository": {
     "type": "git",

@@ -1,0 +1,14 @@
+{
+  "private": true,
+  "name": "nuxt-safe-action-example",
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build"
+  },
+  "dependencies": {
+    "nuxt": "^4.3.1",
+    "nuxt-safe-action": "latest",
+    "zod": "^3.24.0"
+  }
+}

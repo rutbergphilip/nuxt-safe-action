@@ -30,6 +30,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        nuxt-version: [3, 4]
+
+    name: test (nuxt ${{ matrix.nuxt-version }})
+
     steps:
       - uses: actions/checkout@v6
 
@@ -42,10 +48,15 @@ jobs:
       - name: Install dependencies
         run: npx nypm@latest i
 
+      - name: Override to Nuxt 3
+        if: matrix.nuxt-version == 3
+        run: npx nypm@latest i nuxt@^3
+
       - name: Playground prepare
         run: npm run dev:prepare
 
       - name: Type check
+        if: matrix.nuxt-version == 4
         run: npm run test:types
 
       - name: Test

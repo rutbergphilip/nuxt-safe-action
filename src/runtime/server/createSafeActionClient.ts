@@ -59,7 +59,12 @@ async function executeMiddlewareChain<TServerError>(
           return { ctx: newCtx }
         },
       })
-      return result!
+      if (result === undefined) {
+        throw new Error(
+          'Middleware did not call next(). Every middleware must call next() to continue the chain.',
+        )
+      }
+      return result
     }
   }
 

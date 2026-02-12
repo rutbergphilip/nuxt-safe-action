@@ -1,18 +1,13 @@
 import { fileURLToPath, URL } from 'node:url'
 import { createRequire } from 'node:module'
+
 const require = createRequire(import.meta.url)
 const { version } = require('../package.json')
 
 export default defineNuxtConfig({
   extends: ['docus'],
 
-  vite: {
-    resolve: {
-      alias: {
-        'shiki/wasm': fileURLToPath(new URL('./shiki-wasm-stub.mjs', import.meta.url)),
-      },
-    },
-  },
+  modules: ['nuxt-shiki'],
 
   site: {
     name: 'nuxt-safe-action',
@@ -34,10 +29,17 @@ export default defineNuxtConfig({
       pages.push({
         name: 'landing',
         path: '/',
-        file: fileURLToPath(
-          new URL('./app/pages/index.vue', import.meta.url),
-        ),
+        file: fileURLToPath(new URL('./app/pages/index.vue', import.meta.url)),
       })
+    },
+  },
+
+  shiki: {
+    bundledThemes: ['github-dark', 'github-light'],
+    bundledLangs: ['typescript', 'vue'],
+    defaultTheme: {
+      light: 'github-light',
+      dark: 'github-dark',
     },
   },
 })

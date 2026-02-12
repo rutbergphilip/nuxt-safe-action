@@ -7,7 +7,8 @@ definePageMeta({
 
 useSeoMeta({
   title: 'nuxt-safe-action',
-  description: 'Type-safe server actions for Nuxt. Define actions with Zod validation and middleware, call them from the client with full type inference.',
+  description:
+    'Type-safe server actions for Nuxt. Define actions with Zod validation and middleware, call them from the client with full type inference.',
   ogImage: '/social-card.png',
 })
 
@@ -23,32 +24,38 @@ const features = [
   {
     icon: 'i-lucide-shield-check',
     title: 'End-to-end Type Safety',
-    description: 'Input and output types flow from server to client automatically. No manual type definitions needed.',
+    description:
+      'Input and output types flow from server to client automatically. No manual type definitions needed.',
   },
   {
     icon: 'i-lucide-check-circle',
     title: 'Input Validation',
-    description: 'Zod schemas validate input before your handler runs. Validation errors are returned per-field.',
+    description:
+      'Zod schemas validate input before your handler runs. Validation errors are returned per-field.',
   },
   {
     icon: 'i-lucide-layers',
     title: 'Composable Middleware',
-    description: 'Chain auth checks, logging, rate limiting, and more with fully typed context passing.',
+    description:
+      'Chain auth checks, logging, rate limiting, and more with fully typed context passing.',
   },
   {
     icon: 'i-lucide-activity',
     title: 'Reactive Composable',
-    description: 'useAction gives you status, data, validationErrors, and lifecycle callbacks out of the box.',
+    description:
+      'useAction gives you status, data, validationErrors, and lifecycle callbacks out of the box.',
   },
   {
     icon: 'i-lucide-folder-open',
     title: 'Auto Route Generation',
-    description: 'Drop files in server/actions/ and API routes are created for you. Zero configuration.',
+    description:
+      'Drop files in server/actions/ and API routes are created for you. Zero configuration.',
   },
   {
     icon: 'i-lucide-server',
     title: 'H3Event Access',
-    description: 'Full request context available in middleware and handlers. Read cookies, headers, sessions.',
+    description:
+      'Full request context available in middleware and handlers. Read cookies, headers, sessions.',
   },
 ]
 
@@ -90,39 +97,9 @@ const { execute, data, isExecuting } = useAction(
 
 const activeTab = ref<'server' | 'client'>('server')
 
-
-const { public: { version } } = useRuntimeConfig()
-
-
-const { data: highlighted } = await useAsyncData('landing-code', async () => {
-  const { createHighlighterCore } = await import('shiki/core')
-  const { createJavaScriptRegexEngine } = await import('shiki/engine/javascript')
-
-  const highlighter = await createHighlighterCore({
-    engine: createJavaScriptRegexEngine(),
-    themes: [
-      import('@shikijs/themes/github-dark'),
-      import('@shikijs/themes/github-light'),
-    ],
-    langs: [
-      import('@shikijs/langs/typescript'),
-      import('@shikijs/langs/vue'),
-    ],
-  })
-
-  const server = highlighter.codeToHtml(serverCode, {
-    lang: 'typescript',
-    themes: { light: 'github-light', dark: 'github-dark' },
-  })
-
-  const client = highlighter.codeToHtml(clientCode, {
-    lang: 'vue',
-    themes: { light: 'github-light', dark: 'github-dark' },
-  })
-
-  highlighter.dispose()
-  return { server, client }
-})
+const {
+  public: { version },
+} = useRuntimeConfig()
 </script>
 
 <template>
@@ -143,9 +120,8 @@ const { data: highlighted } = await useAsyncData('landing-code', async () => {
         </h1>
 
         <p class="hero-description">
-          Define actions on the server with Zod validation and middleware.
-          Call them from the client with full type inference, reactive status
-          tracking, and field-level validation errors.
+          Define actions on the server with Zod validation and middleware. Call them from the client
+          with full type inference, reactive status tracking, and field-level validation errors.
         </p>
 
         <div class="hero-actions">
@@ -183,7 +159,9 @@ const { data: highlighted } = await useAsyncData('landing-code', async () => {
       <div class="code-container">
         <div class="code-header-row">
           <h2 class="section-label">How it works</h2>
-          <p class="section-sublabel">Define on the server. Use on the client. Types flow automatically.</p>
+          <p class="section-sublabel">
+            Define on the server. Use on the client. Types flow automatically.
+          </p>
         </div>
 
         <div class="code-panels">
@@ -193,7 +171,9 @@ const { data: highlighted } = await useAsyncData('landing-code', async () => {
               <span class="code-panel-file">server/actions/create-post.ts</span>
               <span class="code-panel-badge code-panel-badge--server">Server</span>
             </div>
-            <div class="code-block" v-html="highlighted?.server" />
+            <div class="code-block">
+              <Shiki lang="typescript" :code="serverCode" />
+            </div>
           </div>
 
           <div class="code-arrow">
@@ -208,7 +188,9 @@ const { data: highlighted } = await useAsyncData('landing-code', async () => {
               <span class="code-panel-file">components/CreatePost.vue</span>
               <span class="code-panel-badge code-panel-badge--client">Client</span>
             </div>
-            <div class="code-block" v-html="highlighted?.client" />
+            <div class="code-block">
+              <Shiki lang="vue" :code="clientCode" />
+            </div>
           </div>
         </div>
 
@@ -231,10 +213,15 @@ const { data: highlighted } = await useAsyncData('landing-code', async () => {
           </div>
           <div class="code-panel code-panel--mobile">
             <div class="code-panel-header">
-              <span v-if="activeTab === 'server'" class="code-panel-file">server/actions/create-post.ts</span>
+              <span v-if="activeTab === 'server'" class="code-panel-file"
+                >server/actions/create-post.ts</span
+              >
               <span v-else class="code-panel-file">components/CreatePost.vue</span>
             </div>
-            <div class="code-block" v-html="activeTab === 'server' ? highlighted?.server : highlighted?.client" />
+            <div class="code-block">
+              <Shiki v-if="activeTab === 'server'" lang="typescript" :code="serverCode" />
+              <Shiki v-else lang="vue" :code="clientCode" />
+            </div>
           </div>
         </div>
       </div>
@@ -243,7 +230,9 @@ const { data: highlighted } = await useAsyncData('landing-code', async () => {
     <section class="features-section">
       <div class="features-container">
         <h2 class="section-label">Features</h2>
-        <p class="section-sublabel">Everything you need for safe, validated server-client communication.</p>
+        <p class="section-sublabel">
+          Everything you need for safe, validated server-client communication.
+        </p>
 
         <div class="features-grid">
           <div v-for="feature in features" :key="feature.title" class="feature-card">
@@ -363,7 +352,7 @@ html.dark .shiki span {
 }
 
 .hero-nuxt {
-  background: linear-gradient(135deg, #00DC82 0%, #36E4A0 50%, #00DC82 100%);
+  background: linear-gradient(135deg, #00dc82 0%, #36e4a0 50%, #00dc82 100%);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -395,7 +384,9 @@ html.dark .shiki span {
   font-size: 0.82rem;
   color: var(--ui-text-muted);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .install-cmd:hover {
@@ -489,12 +480,12 @@ html.dark .shiki span {
 }
 
 .code-panel-dot--green {
-  background: #00DC82;
+  background: #00dc82;
   box-shadow: 0 0 6px rgba(0, 220, 130, 0.4);
 }
 
 .code-panel-dot--emerald {
-  background: #36E4A0;
+  background: #36e4a0;
   box-shadow: 0 0 6px rgba(54, 228, 160, 0.4);
 }
 
@@ -520,12 +511,12 @@ html.dark .shiki span {
 
 .code-panel-badge--server {
   background: rgba(0, 220, 130, 0.1);
-  color: #00DC82;
+  color: #00dc82;
 }
 
 .code-panel-badge--client {
   background: rgba(54, 228, 160, 0.1);
-  color: #36E4A0;
+  color: #36e4a0;
 }
 
 .code-block {
@@ -533,7 +524,7 @@ html.dark .shiki span {
   overflow-x: auto;
 }
 
-.code-block :deep(pre.shiki) {
+.code-block :deep(pre) {
   padding: 1rem 1.15rem;
   margin: 0;
   overflow-x: auto;
@@ -544,7 +535,7 @@ html.dark .shiki span {
   background: transparent !important;
 }
 
-.code-block :deep(pre.shiki code) {
+.code-block :deep(pre code) {
   font-family: inherit;
   background: transparent;
 }
@@ -610,7 +601,9 @@ html.dark .shiki span {
   font-weight: 500;
   color: var(--ui-text-dimmed);
   cursor: pointer;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .code-mobile-tab:first-child {

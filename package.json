@@ -1,6 +1,6 @@
 {
   "name": "nuxt-safe-action",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Type-safe and validated server actions for Nuxt",
   "repository": {
     "type": "git",
@@ -29,10 +29,12 @@
   "exports": {
     ".": {
       "types": "./dist/types.d.mts",
-      "import": "./dist/module.mjs"
+      "import": "./dist/module.mjs",
+      "default": "./dist/module.mjs"
     }
   },
   "main": "./dist/module.mjs",
+  "types": "./dist/types.d.mts",
   "typesVersions": {
     "*": {
       ".": [

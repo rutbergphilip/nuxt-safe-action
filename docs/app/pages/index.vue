@@ -95,10 +95,19 @@ const { public: { version } } = useRuntimeConfig()
 
 
 const { data: highlighted } = await useAsyncData('landing-code', async () => {
-  const { createHighlighter } = await import('shiki')
-  const highlighter = await createHighlighter({
-    themes: ['github-dark', 'github-light'],
-    langs: ['typescript', 'vue'],
+  const { createHighlighterCore } = await import('shiki/core')
+  const { createJavaScriptRegexEngine } = await import('shiki/engine/javascript')
+
+  const highlighter = await createHighlighterCore({
+    engine: createJavaScriptRegexEngine(),
+    themes: [
+      import('@shikijs/themes/github-dark'),
+      import('@shikijs/themes/github-light'),
+    ],
+    langs: [
+      import('@shikijs/langs/typescript'),
+      import('@shikijs/langs/vue'),
+    ],
   })
 
   const server = highlighter.codeToHtml(serverCode, {

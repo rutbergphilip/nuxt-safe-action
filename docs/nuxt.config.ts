@@ -1,16 +1,10 @@
 import { fileURLToPath, URL } from 'node:url'
 import { createRequire } from 'node:module'
-import wasm from 'vite-plugin-wasm'
-
 const require = createRequire(import.meta.url)
 const { version } = require('../package.json')
 
 export default defineNuxtConfig({
   extends: ['docus'],
-
-  vite: {
-    plugins: [wasm()],
-  },
 
   site: {
     name: 'nuxt-safe-action',

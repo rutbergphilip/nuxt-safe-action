@@ -52,7 +52,7 @@ jobs:
 
       - name: Override to Nuxt 3
         if: matrix.nuxt-version == 3
-        run: npx nypm@latest i -w nuxt@^3
+        run: pnpm add -w nuxt@^3
 
       - name: Playground prepare
         run: npm run dev:prepare

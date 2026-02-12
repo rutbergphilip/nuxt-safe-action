@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/rutbergphilip/nuxt-safe-action/main/docs/social-card.png" alt="nuxt-safe-action social card" />
+</p>
+
 # nuxt-safe-action
 
 [![npm version][npm-version-src]][npm-version-href]

@@ -9,6 +9,14 @@ export default defineNuxtConfig({
 
   modules: ['nuxt-shiki'],
 
+  vite: {
+    resolve: {
+      alias: {
+        'shiki/wasm': fileURLToPath(new URL('./shiki-wasm-stub.mjs', import.meta.url)),
+      },
+    },
+  },
+
   site: {
     name: 'nuxt-safe-action',
   },

@@ -9,9 +9,7 @@
     "preview": "nuxi preview"
   },
   "dependencies": {
-    "docus": "^5.5.0"
-  },
-  "devDependencies": {
-    "vite-plugin-wasm": "^3.5.0"
+    "docus": "^5.5.0",
+    "nuxt-shiki": "^0.3.2"
   }
 }

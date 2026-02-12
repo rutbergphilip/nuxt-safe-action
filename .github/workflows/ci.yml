@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - develop
   pull_request:
     branches:
       - main
@@ -51,7 +52,7 @@ jobs:
 
       - name: Override to Nuxt 3
         if: matrix.nuxt-version == 3
-        run: npx nypm@latest i nuxt@^3
+        run: pnpm add -w nuxt@^3
 
       - name: Playground prepare
         run: npm run dev:prepare

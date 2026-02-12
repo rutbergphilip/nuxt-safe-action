@@ -85,7 +85,7 @@ const { execute, data, isExecuting } = useAction(
     },
   }
 )
-<\/script>
+${'<'}/script>
 
 <template>
   <form @submit.prevent="execute(formData)">

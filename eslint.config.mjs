@@ -16,4 +16,9 @@ export default createConfigForNuxt({
 }).append(
   // Disable ESLint rules that conflict with Prettier
   prettierConfig,
+  {
+    rules: {
+      'vue/multi-word-component-names': 'off',
+    },
+  },
 )

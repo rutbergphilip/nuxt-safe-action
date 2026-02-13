@@ -36,6 +36,44 @@
       </div>
     </section>
 
+    <!-- Get User Action (GET method) -->
+    <section style="margin-top: 3rem">
+      <h2>Get User Action <small style="color: #888">(GET)</small></h2>
+      <form @submit.prevent="handleGetUser">
+        <input
+          v-model="userId"
+          placeholder="Enter user ID (1, 2, or 3)"
+          style="padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; width: 200px"
+        />
+        <button
+          type="submit"
+          :disabled="getUserAction.isExecuting.value"
+          style="margin-left: 0.5rem; padding: 0.5rem 1rem; cursor: pointer"
+        >
+          {{ getUserAction.isExecuting.value ? 'Loading...' : 'Look up' }}
+        </button>
+      </form>
+
+      <div
+        v-if="getUserAction.hasSucceeded.value"
+        style="margin-top: 1rem; padding: 1rem; background: #f0f0f9; border-radius: 4px"
+      >
+        <strong>User found!</strong>
+        <pre style="margin-top: 0.5rem">{{
+          JSON.stringify(getUserAction.data.value, null, 2)
+        }}</pre>
+      </div>
+
+      <div v-if="getUserAction.hasErrored.value" style="margin-top: 1rem; color: red">
+        <div v-if="getUserAction.serverError.value">
+          Server error: {{ getUserAction.serverError.value }}
+        </div>
+        <div v-if="getUserAction.validationErrors.value">
+          Validation errors: {{ JSON.stringify(getUserAction.validationErrors.value) }}
+        </div>
+      </div>
+    </section>
+
     <!-- Create Post Action -->
     <section style="margin-top: 3rem">
       <h2>Create Post Action</h2>
@@ -89,15 +127,22 @@
 </template>
 
 <script setup lang="ts">
-import { greet, createPost } from '#safe-action/actions'
+import { greet, getUser, createPost } from '#safe-action/actions'
 
 const greetName = ref('')
+const userId = ref('')
 const postTitle = ref('')
 const postBody = ref('')
 
 const greetAction = useAction(greet, {
   onSuccess({ data }) {
     console.log('Greet succeeded:', data)
+  },
+})
+
+const getUserAction = useAction(getUser, {
+  onSuccess({ data }) {
+    console.log('User found:', data)
   },
 })
 
@@ -111,6 +156,10 @@ const createPostAction = useAction(createPost, {
 
 function handleGreet() {
   greetAction.execute({ name: greetName.value })
+}
+
+function handleGetUser() {
+  getUserAction.execute({ id: userId.value })
 }
 
 function handleCreatePost() {

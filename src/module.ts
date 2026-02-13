@@ -33,14 +33,8 @@ export default defineNuxtModule<ModuleOptions>({
   setup(options, nuxt) {
     const { resolve } = createResolver(import.meta.url)
 
-    // ------------------------------------------------------------------
-    // 1. Auto-import composables (useAction)
-    // ------------------------------------------------------------------
     addImportsDir(resolve('./runtime/composables'))
 
-    // ------------------------------------------------------------------
-    // 2. Auto-import server utilities (createSafeActionClient, errors)
-    // ------------------------------------------------------------------
     addServerImports([
       { name: 'createSafeActionClient', from: resolve('./runtime/server/createSafeActionClient') },
       { name: 'ActionError', from: resolve('./runtime/server/errors') },
@@ -48,17 +42,10 @@ export default defineNuxtModule<ModuleOptions>({
       { name: 'returnValidationErrors', from: resolve('./runtime/server/errors') },
     ])
 
-    // ------------------------------------------------------------------
-    // 3. Provide #safe-action alias for explicit server-side imports
-    // ------------------------------------------------------------------
     nuxt.options.alias['#safe-action'] = resolve('./runtime/server/index')
 
-    // ------------------------------------------------------------------
-    // 4. Scan server/actions and generate routes + typed references
-    // ------------------------------------------------------------------
     const actionsDir = options.actionsDir || 'actions'
 
-    // We need to hook into build to scan actions and generate handlers
     nuxt.hook('nitro:config', (nitroConfig) => {
       const serverDir = nuxt.options.serverDir
       const fullActionsDir = join(serverDir, actionsDir)
@@ -78,36 +65,29 @@ export default defineNuxtModule<ModuleOptions>({
       }
 
       logger.info(
-        `Found ${actionFiles.length} action file(s): ${actionFiles.map((a) => a.name).join(', ')}`,
+        `Found ${actionFiles.length} action file(s): ${actionFiles.map((a) => `${a.method.toUpperCase()} ${a.name}`).join(', ')}`,
       )
 
-      // Register virtual route handlers for each action
       nitroConfig.virtual = nitroConfig.virtual || {}
       nitroConfig.handlers = nitroConfig.handlers || []
 
       for (const action of actionFiles) {
         const virtualKey = `#safe-action-handler/${action.name}`
-
-        // The virtual module imports the action and wraps it in a handler
         nitroConfig.virtual[virtualKey] = generateHandlerCode(action)
 
         nitroConfig.handlers.push({
           route: `/api/_actions/${action.name}`,
-          method: 'post',
+          method: action.method,
           handler: virtualKey,
         })
       }
     })
 
-    // ------------------------------------------------------------------
-    // 5. Generate typed action references for client-side use
-    // ------------------------------------------------------------------
     const serverDir = nuxt.options.serverDir
     const fullActionsDir = join(serverDir, actionsDir)
 
-    // Generate the runtime module with typed action references.
-    // Types are embedded directly in the .ts file (not a separate .d.ts)
-    // because TypeScript ignores .d.ts when a .ts file exists at the same path.
+    // Types are embedded in .ts (not .d.ts) because TypeScript ignores
+    // .d.ts when a .ts file exists at the same path.
     addTemplate({
       filename: 'safe-action/actions.ts',
       write: true,
@@ -126,20 +106,21 @@ export default defineNuxtModule<ModuleOptions>({
           '',
         ]
 
-        // Type-only imports from each action file (erased at runtime)
         for (const action of actionFiles) {
           const exportName = toCamelCase(action.name)
-          const relativePath = posix.join('../..', 'server', actionsDir, action.name)
+          const fileBasename = action.method === 'post'
+            ? action.name
+            : `${action.name}.${action.method}`
+          const relativePath = posix.join('../..', 'server', actionsDir, fileBasename)
           lines.push(`import type _action_${exportName} from '${relativePath}'`)
         }
 
         lines.push('')
 
-        // Typed exports — use indexed access on the _types phantom field
         for (const action of actionFiles) {
           const exportName = toCamelCase(action.name)
           lines.push(
-            `export const ${exportName}: SafeActionReference<(typeof _action_${exportName})['_types']['input'], (typeof _action_${exportName})['_types']['output'], (typeof _action_${exportName})['_types']['serverError']> = Object.freeze({ __safeActionPath: '${action.name}' }) as any`,
+            `export const ${exportName}: SafeActionReference<(typeof _action_${exportName})['_types']['input'], (typeof _action_${exportName})['_types']['output'], (typeof _action_${exportName})['_types']['serverError']> = Object.freeze({ __safeActionPath: '${action.name}', __safeActionMethod: '${action.method.toUpperCase()}' }) as any`,
           )
         }
 
@@ -147,7 +128,6 @@ export default defineNuxtModule<ModuleOptions>({
       },
     })
 
-    // Register the #safe-action/actions alias
     nuxt.hook('prepare:types', ({ tsConfig }) => {
       tsConfig.compilerOptions = tsConfig.compilerOptions || {}
       tsConfig.compilerOptions.paths = tsConfig.compilerOptions.paths || {}
@@ -157,20 +137,34 @@ export default defineNuxtModule<ModuleOptions>({
       ]
     })
 
-    // Add alias for runtime resolution
     nuxt.options.alias['#safe-action/actions'] = join(nuxt.options.buildDir, 'safe-action/actions')
   },
 })
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete'
+
+const HTTP_METHODS: readonly HttpMethod[] = ['get', 'post', 'put', 'patch', 'delete'] as const
 
 interface ActionFileInfo {
-  /** kebab-case name derived from file path (e.g. 'create-post') */
   name: string
-  /** Absolute path to the action file */
   filePath: string
+  method: HttpMethod
+}
+
+/**
+ * Parse an optional HTTP method suffix from a filename.
+ * e.g. 'get-user.get' → { name: 'get-user', method: 'get' }
+ *      'create-post'  → { name: 'create-post', method: 'post' }
+ */
+function parseMethodSuffix(filename: string): { name: string; method: HttpMethod } {
+  const dotIndex = filename.lastIndexOf('.')
+  if (dotIndex > 0) {
+    const suffix = filename.slice(dotIndex + 1).toLowerCase()
+    if (HTTP_METHODS.includes(suffix as HttpMethod)) {
+      return { name: filename.slice(0, dotIndex), method: suffix as HttpMethod }
+    }
+  }
+  return { name: filename, method: 'post' }
 }
 
 /**
@@ -195,9 +189,11 @@ function scanActionFiles(dir: string, prefix = ''): ActionFileInfo[] {
       !entry.name.endsWith('.d.ts') &&
       entry.name !== 'index.ts'
     ) {
-      const name = prefix ? `${prefix}/${basename(entry.name, '.ts')}` : basename(entry.name, '.ts')
+      const raw = basename(entry.name, '.ts')
+      const { name: parsedName, method } = parseMethodSuffix(raw)
+      const name = prefix ? `${prefix}/${parsedName}` : parsedName
 
-      results.push({ name, filePath: fullPath })
+      results.push({ name, filePath: fullPath, method })
     }
   }
 
@@ -208,6 +204,19 @@ function scanActionFiles(dir: string, prefix = ''): ActionFileInfo[] {
  * Generate the virtual handler module code for a given action.
  */
 function generateHandlerCode(action: ActionFileInfo): string {
+  if (action.method === 'get') {
+    return `
+import { defineEventHandler, getQuery } from 'h3'
+import action from '${action.filePath}'
+
+export default defineEventHandler(async (event) => {
+  const query = getQuery(event)
+  const rawInput = query.input ? JSON.parse(query.input) : undefined
+  return action._execute(rawInput, event)
+})
+`
+  }
+
   return `
 import { defineEventHandler, readBody } from 'h3'
 import action from '${action.filePath}'

@@ -30,6 +30,7 @@ export function useAction<TInput, TOutput, TServerError = string>(
   callbacks?: UseActionCallbacks<TInput, TOutput, TServerError>,
 ): UseActionReturn<TInput, TOutput, TServerError> {
   const actionPath = (action as any).__safeActionPath as string
+  const actionMethod = ((action as any).__safeActionMethod as string) || 'POST'
 
   const data = ref<TOutput>() as import('vue').Ref<TOutput | undefined>
   const serverError = ref<TServerError>() as import('vue').Ref<TServerError | undefined>
@@ -39,7 +40,6 @@ export function useAction<TInput, TOutput, TServerError = string>(
   const status = ref<ActionStatus>('idle') as import('vue').Ref<ActionStatus>
 
   async function executeAsync(input: TInput): Promise<ActionResult<TOutput, TServerError>> {
-    // Reset error state
     serverError.value = undefined
     validationErrors.value = undefined
     status.value = 'executing'
@@ -47,13 +47,15 @@ export function useAction<TInput, TOutput, TServerError = string>(
     callbacks?.onExecute?.({ input })
 
     try {
-      const result = await $fetch<ActionResult<TOutput, TServerError>>(
-        `/api/_actions/${actionPath}`,
-        {
-          method: 'POST',
-          body: input as Record<string, unknown>,
-        },
-      )
+      const fetchOptions: Parameters<typeof $fetch>[1] = actionMethod === 'GET'
+        ? { method: 'GET' }
+        : { method: actionMethod as 'POST' | 'PUT' | 'PATCH' | 'DELETE', body: input as Record<string, unknown> }
+
+      const url = actionMethod === 'GET' && input != null
+        ? `/api/_actions/${actionPath}?input=${encodeURIComponent(JSON.stringify(input))}`
+        : `/api/_actions/${actionPath}`
+
+      const result = await $fetch<ActionResult<TOutput, TServerError>>(url, fetchOptions)
 
       if (result.data !== undefined) {
         data.value = result.data

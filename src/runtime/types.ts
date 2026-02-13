@@ -1,10 +1,6 @@
 import type { H3Event } from 'h3'
 import type { ZodType } from 'zod'
 
-// ---------------------------------------------------------------------------
-// Action Result — returned to the client from every action execution
-// ---------------------------------------------------------------------------
-
 export interface ActionResult<TOutput, TServerError = string> {
   data?: TOutput
   serverError?: TServerError
@@ -12,10 +8,6 @@ export interface ActionResult<TOutput, TServerError = string> {
 }
 
 export type ValidationErrors = Record<string, string[]>
-
-// ---------------------------------------------------------------------------
-// Safe Action — the object produced by the builder chain
-// ---------------------------------------------------------------------------
 
 /**
  * A safe action carries phantom types for input/output inference plus
@@ -33,13 +25,8 @@ export interface SafeAction<TInput = unknown, TOutput = unknown, TServerError = 
     serverError: TServerError
   }
 
-  /** used by the generated Nitro handler */
   _execute: (rawInput: unknown, event: H3Event) => Promise<ActionResult<TOutput, TServerError>>
 }
-
-// ---------------------------------------------------------------------------
-// Client-side action reference (the thin stub used in composables)
-// ---------------------------------------------------------------------------
 
 export interface SafeActionReference<TInput = unknown, TOutput = unknown, TServerError = string> {
   readonly __safeActionPath: string
@@ -50,10 +37,6 @@ export interface SafeActionReference<TInput = unknown, TOutput = unknown, TServe
     serverError: TServerError
   }
 }
-
-// ---------------------------------------------------------------------------
-// Middleware types
-// ---------------------------------------------------------------------------
 
 export interface MiddlewareArgs<TCtx> {
   ctx: TCtx
@@ -71,10 +54,6 @@ export type MiddlewareFn<TCtxIn = Record<string, unknown>, TCtxOut = TCtxIn> = (
   args: MiddlewareArgs<TCtxIn>,
 ) => Promise<MiddlewareResult<TCtxOut>>
 
-// ---------------------------------------------------------------------------
-// Action handler
-// ---------------------------------------------------------------------------
-
 export interface ActionHandlerArgs<TCtx, TInput> {
   parsedInput: TInput
   ctx: TCtx
@@ -85,23 +64,11 @@ export type ActionHandler<TCtx, TInput, TOutput> = (
   args: ActionHandlerArgs<TCtx, TInput>,
 ) => Promise<TOutput> | TOutput
 
-// ---------------------------------------------------------------------------
-// Action metadata
-// ---------------------------------------------------------------------------
-
 export type ActionMetadata = Record<string, unknown>
-
-// ---------------------------------------------------------------------------
-// Client configuration
-// ---------------------------------------------------------------------------
 
 export interface SafeActionClientOpts<TServerError = string> {
   handleServerError?: (error: Error) => TServerError
 }
-
-// ---------------------------------------------------------------------------
-// Internal — stored on the built action for the execution engine
-// ---------------------------------------------------------------------------
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface ActionConfig<TServerError = string> {
@@ -114,15 +81,7 @@ export interface ActionConfig<TServerError = string> {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-// ---------------------------------------------------------------------------
-// Status type used by composables
-// ---------------------------------------------------------------------------
-
 export type ActionStatus = 'idle' | 'executing' | 'hasSucceeded' | 'hasErrored'
-
-// ---------------------------------------------------------------------------
-// Type extraction helpers — Volar-friendly inference for generated .d.ts
-// ---------------------------------------------------------------------------
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type InferSafeActionInput<T> =
@@ -138,10 +97,6 @@ export type InferSafeActionServerError<T> =
   T extends SafeActionReference<any, any, infer E> ? E : string
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-// ---------------------------------------------------------------------------
-// useAction return type
-// ---------------------------------------------------------------------------
-
 export interface UseActionReturn<TInput, TOutput, TServerError = string> {
   execute: (input: TInput) => void
   executeAsync: (input: TInput) => Promise<ActionResult<TOutput, TServerError>>
@@ -155,10 +110,6 @@ export interface UseActionReturn<TInput, TOutput, TServerError = string> {
   hasErrored: import('vue').ComputedRef<boolean>
   reset: () => void
 }
-
-// ---------------------------------------------------------------------------
-// useAction options
-// ---------------------------------------------------------------------------
 
 export interface UseActionCallbacks<TInput, TOutput, TServerError = string> {
   onSuccess?: (args: { data: TOutput; input: TInput }) => void

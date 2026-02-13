@@ -7,10 +7,6 @@ describe('nuxt-safe-action', async () => {
     rootDir: fileURLToPath(new URL('./fixtures/basic', import.meta.url)),
   })
 
-  // -------------------------------------------------------------------
-  // Basic action execution
-  // -------------------------------------------------------------------
-
   describe('basic action execution', () => {
     it('renders the index page', async () => {
       const html = await $fetch('/')
@@ -39,10 +35,6 @@ describe('nuxt-safe-action', async () => {
       expect(result.validationErrors).toBeUndefined()
     })
   })
-
-  // -------------------------------------------------------------------
-  // Input validation (Zod schema)
-  // -------------------------------------------------------------------
 
   describe('input validation', () => {
     it('returns validation errors for invalid input', async () => {
@@ -94,10 +86,6 @@ describe('nuxt-safe-action', async () => {
     })
   })
 
-  // -------------------------------------------------------------------
-  // Actions without schema
-  // -------------------------------------------------------------------
-
   describe('action without schema', () => {
     it('passes raw input through when no schema is defined', async () => {
       const result = await $fetch('/api/_actions/no-schema', {
@@ -121,10 +109,6 @@ describe('nuxt-safe-action', async () => {
       })
     })
   })
-
-  // -------------------------------------------------------------------
-  // ActionError (explicit server errors)
-  // -------------------------------------------------------------------
 
   describe('ActionError', () => {
     it('returns serverError when ActionError is thrown', async () => {
@@ -150,10 +134,6 @@ describe('nuxt-safe-action', async () => {
     })
   })
 
-  // -------------------------------------------------------------------
-  // returnValidationErrors (manual validation errors from handler)
-  // -------------------------------------------------------------------
-
   describe('returnValidationErrors', () => {
     it('returns validation errors thrown from handler', async () => {
       const result = await $fetch<{ validationErrors?: Record<string, string[]> }>(
@@ -178,7 +158,6 @@ describe('nuxt-safe-action', async () => {
     })
 
     it('validates with Zod before reaching the handler', async () => {
-      // Invalid email format - should be caught by Zod, not the handler
       const result = await $fetch<{ validationErrors?: Record<string, string[]> }>(
         '/api/_actions/throw-validation-error',
         {
@@ -189,14 +168,9 @@ describe('nuxt-safe-action', async () => {
 
       expect(result.validationErrors).toBeDefined()
       expect(result.validationErrors!.email).toBeDefined()
-      // Should NOT contain the handler's custom error since Zod catches it first
       expect(result.validationErrors!.email).not.toContain('This email is already taken')
     })
   })
-
-  // -------------------------------------------------------------------
-  // handleServerError (custom error transformation)
-  // -------------------------------------------------------------------
 
   describe('handleServerError', () => {
     it('transforms unexpected errors through handleServerError', async () => {
@@ -208,7 +182,6 @@ describe('nuxt-safe-action', async () => {
         },
       )
 
-      // The action client uses handleServerError: (error) => error.message
       expect(result.serverError).toBe('Database connection refused')
     })
 
@@ -225,10 +198,6 @@ describe('nuxt-safe-action', async () => {
     })
   })
 
-  // -------------------------------------------------------------------
-  // Output schema validation
-  // -------------------------------------------------------------------
-
   describe('output schema', () => {
     it('returns data when output passes schema validation', async () => {
       const result = await $fetch('/api/_actions/with-output-schema', {
@@ -240,7 +209,6 @@ describe('nuxt-safe-action', async () => {
     })
 
     it('returns serverError when output fails schema validation', async () => {
-      // value=60 produces doubled=120, which violates max(100)
       const result = await $fetch<{ serverError?: string; data?: unknown }>(
         '/api/_actions/with-output-schema',
         {
@@ -254,10 +222,6 @@ describe('nuxt-safe-action', async () => {
       expect(result.data).toBeUndefined()
     })
   })
-
-  // -------------------------------------------------------------------
-  // Middleware
-  // -------------------------------------------------------------------
 
   describe('middleware', () => {
     it('executes middleware chain and passes context to handler', async () => {
@@ -290,10 +254,6 @@ describe('nuxt-safe-action', async () => {
     })
   })
 
-  // -------------------------------------------------------------------
-  // Metadata
-  // -------------------------------------------------------------------
-
   describe('metadata', () => {
     it('makes metadata accessible in middleware', async () => {
       const result = await $fetch('/api/_actions/with-metadata', {
@@ -310,10 +270,6 @@ describe('nuxt-safe-action', async () => {
     })
   })
 
-  // -------------------------------------------------------------------
-  // Nested directory actions
-  // -------------------------------------------------------------------
-
   describe('nested actions', () => {
     it('registers actions from subdirectories with path prefix', async () => {
       const result = await $fetch('/api/_actions/nested/deep-action', {
@@ -327,14 +283,51 @@ describe('nuxt-safe-action', async () => {
     })
   })
 
-  // -------------------------------------------------------------------
-  // Route generation
-  // -------------------------------------------------------------------
+  describe('HTTP method support', () => {
+    it('executes GET action with query params', async () => {
+      const result = await $fetch(
+        `/api/_actions/get-user?input=${encodeURIComponent(JSON.stringify({ id: '123' }))}`,
+        { method: 'GET' },
+      )
+      expect(result).toEqual({ data: { id: '123', name: 'Test User' } })
+    })
+
+    it('executes PUT action with body', async () => {
+      const result = await $fetch('/api/_actions/update-user', {
+        method: 'PUT',
+        body: { id: '123', name: 'Updated' },
+      })
+      expect(result).toEqual({ data: { id: '123', name: 'Updated', updated: true } })
+    })
+
+    it('executes DELETE action with body', async () => {
+      const result = await $fetch('/api/_actions/remove-item', {
+        method: 'DELETE',
+        body: { id: '123' },
+      })
+      expect(result).toEqual({ data: { id: '123', deleted: true } })
+    })
+
+    it('returns validation errors for GET action with invalid input', async () => {
+      const result = await $fetch<{ validationErrors?: Record<string, string[]> }>(
+        `/api/_actions/get-user?input=${encodeURIComponent(JSON.stringify({ id: 123 }))}`,
+        { method: 'GET' },
+      )
+      expect(result.validationErrors).toBeDefined()
+    })
+
+    it('existing POST actions still work without suffix', async () => {
+      const result = await $fetch('/api/_actions/greet', {
+        method: 'POST',
+        body: { name: 'World' },
+      })
+      expect(result).toEqual({ data: { greeting: 'Hello, World!' } })
+    })
+  })
 
   describe('route generation', () => {
-    it('generates POST routes for each action file', async () => {
-      // All these action routes should exist
-      const routes = [
+    it('generates routes for each action file with correct methods', async () => {
+      const postRoutes = [
         '/api/_actions/greet',
         '/api/_actions/no-schema',
         '/api/_actions/throw-action-error',
@@ -348,9 +341,7 @@ describe('nuxt-safe-action', async () => {
         '/api/_actions/nested/deep-action',
       ]
 
-      for (const route of routes) {
-        // Sending a POST with empty body - the action should respond
-        // (either with data, validationErrors, or serverError - but NOT a 404)
+      for (const route of postRoutes) {
         const result = await $fetch<Record<string, unknown>>(route, {
           method: 'POST',
           body: {},
@@ -362,12 +353,28 @@ describe('nuxt-safe-action', async () => {
           || result.serverError !== undefined,
         ).toBe(true)
       }
+
+      const methodRoutes: { route: string; method: string; body?: Record<string, unknown>; query?: string }[] = [
+        { route: '/api/_actions/get-user', method: 'GET', query: `input=${encodeURIComponent(JSON.stringify({ id: '1' }))}` },
+        { route: '/api/_actions/update-user', method: 'PUT', body: { id: '1', name: 'x' } },
+        { route: '/api/_actions/remove-item', method: 'DELETE', body: { id: '1' } },
+      ]
+
+      for (const { route, method, body, query } of methodRoutes) {
+        const url = query ? `${route}?${query}` : route
+        const result = await $fetch<Record<string, unknown>>(url, {
+          method,
+          ...(body ? { body } : {}),
+        })
+
+        expect(
+          result.data !== undefined
+          || result.validationErrors !== undefined
+          || result.serverError !== undefined,
+        ).toBe(true)
+      }
     })
   })
-
-  // -------------------------------------------------------------------
-  // Edge cases
-  // -------------------------------------------------------------------
 
   describe('edge cases', () => {
     it('handles null body gracefully', async () => {
@@ -375,12 +382,10 @@ describe('nuxt-safe-action', async () => {
         method: 'POST',
       })
 
-      // Should not crash - either returns data or an error
       expect(result).toBeDefined()
     })
 
     it('handles multiple validation errors on the same field', async () => {
-      // Zod can produce multiple errors for the same path
       const result = await $fetch<{ validationErrors?: Record<string, string[]> }>(
         '/api/_actions/greet',
         {
@@ -390,7 +395,6 @@ describe('nuxt-safe-action', async () => {
       )
 
       expect(result.validationErrors).toBeDefined()
-      // Each field's errors should be an array
       const nameErrors = result.validationErrors!.name
       expect(Array.isArray(nameErrors)).toBe(true)
     })

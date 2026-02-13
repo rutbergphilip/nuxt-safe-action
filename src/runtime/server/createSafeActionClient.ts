@@ -13,10 +13,6 @@ import type {
 } from '../types'
 import { ActionError, ActionValidationError } from './errors'
 
-// ---------------------------------------------------------------------------
-// Zod error formatting
-// ---------------------------------------------------------------------------
-
 function formatZodErrors(zodError: ZodError): ValidationErrors {
   const errors: ValidationErrors = {}
   for (const issue of zodError.issues) {
@@ -28,10 +24,6 @@ function formatZodErrors(zodError: ZodError): ValidationErrors {
   }
   return errors
 }
-
-// ---------------------------------------------------------------------------
-// Middleware chain execution (onion model)
-// ---------------------------------------------------------------------------
 
 async function executeMiddlewareChain<TServerError>(
   middlewares: MiddlewareFn<any, any>[],
@@ -70,10 +62,6 @@ async function executeMiddlewareChain<TServerError>(
 
   return execute(initialCtx)
 }
-
-// ---------------------------------------------------------------------------
-// Action builder — the chain: .schema() → .use() → .metadata() → .action()
-// ---------------------------------------------------------------------------
 
 class SafeActionBuilder<TCtx, TInput, TServerError> {
   private _middlewares: MiddlewareFn<any, any>[]
@@ -178,10 +166,6 @@ class SafeActionBuilder<TCtx, TInput, TServerError> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Action execution engine
-// ---------------------------------------------------------------------------
-
 async function executeAction<TServerError>(
   rawInput: unknown,
   event: H3Event,
@@ -246,10 +230,6 @@ async function executeAction<TServerError>(
     return { serverError: 'An unexpected error occurred' as TServerError }
   }
 }
-
-// ---------------------------------------------------------------------------
-// Factory — the public API
-// ---------------------------------------------------------------------------
 
 /**
  * Create a safe action client with optional global configuration.

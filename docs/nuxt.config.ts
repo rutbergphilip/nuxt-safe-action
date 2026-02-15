@@ -9,6 +9,14 @@ export default defineNuxtConfig({
 
   modules: ['nuxt-shiki'],
 
+  app: {
+    head: {
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+      ],
+    },
+  },
+
   site: {
     name: 'nuxt-safe-action',
   },

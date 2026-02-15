@@ -550,6 +550,10 @@ html.dark .shiki span {
   background: transparent;
 }
 
+.code-block :deep(.shiki span.line) {
+  display: inline;
+}
+
 .code-arrow {
   display: flex;
   flex-direction: column;

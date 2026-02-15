@@ -50,17 +50,18 @@ const { execute, data, status, validationErrors } = useAction(createPost)
 
 ## Why nuxt-safe-action?
 
-Calling server endpoints with raw `$fetch` is untyped, error-prone, and forces you to manually handle validation, error formatting, and loading states. `nuxt-safe-action` gives you a declarative builder that validates input with Zod, chains middleware for auth and logging, and returns reactive state on the client, all with full end-to-end type inference. It works with Nuxt 3 and Nuxt 4, supports both Zod v3 and v4, and adds minimal bundle overhead.
+Nuxt already provides `useFetch`/`$fetch` with typed responses and file-based server routes. But input types, validation, and error handling are still left to you in every route handler. `nuxt-safe-action` adds a declarative builder that validates input with Zod, chains per-action middleware for auth and logging, and returns field-level validation errors to the client. It works with Nuxt 3 and Nuxt 4, supports both Zod v3 and v4, and adds minimal bundle overhead.
 
 ### Comparison
 
-| | `$fetch` | tRPC-nuxt | **nuxt-safe-action** |
+| | `$fetch` / `useFetch` | tRPC-nuxt | **nuxt-safe-action** |
 |---|---|---|---|
-| Type safety | manual | full | full |
-| Input validation | manual | via zod | built-in zod |
-| Middleware | manual | via context | composable chain |
-| File-based routing | N/A | no | auto-generated |
-| Vue composable | no | no | `useAction` |
+| End-to-end type safety | output only | full | full |
+| Input validation | manual per route | via zod | built-in zod |
+| Per-action middleware | no | yes | composable chain |
+| Field-level validation errors | no | no | built-in |
+| File-based routing | `server/api/` | procedure-based | `server/actions/` |
+| Reactive composable | `useFetch` | `useQuery` | `useAction` |
 | Bundle overhead | none | heavy | minimal |
 
 ## Quick Setup

@@ -9,7 +9,17 @@ useSeoMeta({
   title: 'nuxt-safe-action',
   description:
     'Type-safe server actions for Nuxt. Define actions with Zod validation and middleware, call them from the client with full type inference.',
+  ogTitle: 'nuxt-safe-action - Type-safe Server Actions for Nuxt',
+  ogDescription:
+    'Define server actions with Zod validation and composable middleware. Call them from Vue components with full type inference, reactive status tracking, and field-level validation errors.',
+  ogType: 'website',
+  ogUrl: 'https://nuxt-safe-action.vercel.app',
   ogImage: '/social-card.png',
+  twitterCard: 'summary_large_image',
+  twitterTitle: 'nuxt-safe-action - Type-safe Server Actions for Nuxt',
+  twitterDescription:
+    'Define server actions with Zod validation and composable middleware. Call them from Vue components with full type inference, reactive status tracking, and field-level validation errors.',
+  twitterImage: 'https://nuxt-safe-action.vercel.app/social-card.png',
 })
 
 const copied = ref(false)

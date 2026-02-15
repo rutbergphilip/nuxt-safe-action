@@ -6,7 +6,7 @@
     "type": "git",
     "url": "git+https://github.com/rutbergphilip/nuxt-safe-action.git"
   },
-  "homepage": "https://github.com/rutbergphilip/nuxt-safe-action",
+  "homepage": "https://nuxt-safe-action.vercel.app",
   "bugs": {
     "url": "https://github.com/rutbergphilip/nuxt-safe-action/issues"
   },
@@ -18,7 +18,17 @@
     "validation",
     "zod",
     "middleware",
-    "vue"
+    "vue",
+    "nuxt3",
+    "nuxt4",
+    "vue3",
+    "typescript",
+    "form-validation",
+    "rpc",
+    "h3",
+    "nitro",
+    "server-functions",
+    "composable"
   ],
   "author": "Philip Rutberg",
   "license": "MIT",

@@ -1,5 +1,6 @@
 ---
 title: Home
+description: Type-safe server actions for Nuxt with Zod validation, composable middleware, and reactive Vue composables.
 navigation: false
 layout: page
 ---

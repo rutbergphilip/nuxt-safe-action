@@ -2,16 +2,14 @@
   <img src="https://raw.githubusercontent.com/rutbergphilip/nuxt-safe-action/main/docs/public/social-card.png" alt="nuxt-safe-action social card" />
 </p>
 
-<h1 align="center">nuxt-safe-action</h1>
+# nuxt-safe-action
 
-<p align="center">Type-safe server actions for Nuxt.</p>
+[![npm version](https://img.shields.io/npm/v/nuxt-safe-action/latest.svg?style=flat&colorA=020420&colorB=00DC82)](https://npmjs.com/package/nuxt-safe-action)
+[![npm downloads](https://img.shields.io/npm/dm/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82)](https://npm.chart.dev/nuxt-safe-action)
+[![License](https://img.shields.io/npm/l/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82)](https://npmjs.com/package/nuxt-safe-action)
+[![Nuxt](https://img.shields.io/badge/Nuxt-020420?logo=nuxt)](https://nuxt.com)
 
-<p align="center">
-  <a href="https://npmjs.com/package/nuxt-safe-action"><img src="https://img.shields.io/npm/v/nuxt-safe-action/latest.svg?style=flat&colorA=020420&colorB=00DC82" alt="npm version" /></a>
-  <a href="https://npm.chart.dev/nuxt-safe-action"><img src="https://img.shields.io/npm/dm/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82" alt="npm downloads" /></a>
-  <a href="https://npmjs.com/package/nuxt-safe-action"><img src="https://img.shields.io/npm/l/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82" alt="License" /></a>
-  <a href="https://nuxt.com"><img src="https://img.shields.io/badge/Nuxt-020420?logo=nuxt" alt="Nuxt" /></a>
-</p>
+Type-safe server actions for Nuxt.
 
 Define actions on the server with Zod validation and middleware, and call them from the client with full type inference, reactive status tracking, and field-level validation errors.
 

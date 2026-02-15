@@ -2,10 +2,6 @@
   <img src="https://raw.githubusercontent.com/rutbergphilip/nuxt-safe-action/main/docs/public/social-card.png" alt="nuxt-safe-action social card" />
 </p>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/rutbergphilip/nuxt-safe-action/main/docs/public/logo.svg" width="80" alt="nuxt-safe-action logo" />
-</p>
-
 <h1 align="center">nuxt-safe-action</h1>
 
 <p align="center">Type-safe server actions for Nuxt.</p>

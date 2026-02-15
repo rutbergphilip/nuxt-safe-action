@@ -1,16 +1,21 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/rutbergphilip/nuxt-safe-action/main/docs/public/logo.svg" width="120" alt="nuxt-safe-action logo" />
+  <img src="https://raw.githubusercontent.com/rutbergphilip/nuxt-safe-action/main/docs/public/social-card.png" alt="nuxt-safe-action social card" />
 </p>
 
-# nuxt-safe-action
+<p align="center">
+  <img src="https://raw.githubusercontent.com/rutbergphilip/nuxt-safe-action/main/docs/public/logo.svg" width="80" alt="nuxt-safe-action logo" />
+</p>
 
-[![npm version][npm-version-src]][npm-version-href]
-[![npm downloads][npm-downloads-src]][npm-downloads-href]
-[![License][license-src]][license-href]
-[![Nuxt][nuxt-src]][nuxt-href]
-[![StackBlitz][stackblitz-src]][stackblitz-href]
+<h1 align="center">nuxt-safe-action</h1>
 
-Type-safe server actions for Nuxt.
+<p align="center">Type-safe server actions for Nuxt.</p>
+
+<p align="center">
+  <a href="https://npmjs.com/package/nuxt-safe-action"><img src="https://img.shields.io/npm/v/nuxt-safe-action/latest.svg?style=flat&colorA=020420&colorB=00DC82" alt="npm version" /></a>
+  <a href="https://npm.chart.dev/nuxt-safe-action"><img src="https://img.shields.io/npm/dm/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82" alt="npm downloads" /></a>
+  <a href="https://npmjs.com/package/nuxt-safe-action"><img src="https://img.shields.io/npm/l/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82" alt="License" /></a>
+  <a href="https://nuxt.com"><img src="https://img.shields.io/badge/Nuxt-020420?logo=nuxt" alt="Nuxt" /></a>
+</p>
 
 Define actions on the server with Zod validation and middleware, and call them from the client with full type inference, reactive status tracking, and field-level validation errors.
 
@@ -272,18 +277,3 @@ Inspired by [next-safe-action](https://github.com/TheEdoRan/next-safe-action), a
 
 [MIT](./LICENSE)
 
-<!-- Badges -->
-[npm-version-src]: https://img.shields.io/npm/v/nuxt-safe-action/latest.svg?style=flat&colorA=020420&colorB=00DC82
-[npm-version-href]: https://npmjs.com/package/nuxt-safe-action
-
-[npm-downloads-src]: https://img.shields.io/npm/dm/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82
-[npm-downloads-href]: https://npm.chart.dev/nuxt-safe-action
-
-[license-src]: https://img.shields.io/npm/l/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82
-[license-href]: https://npmjs.com/package/nuxt-safe-action
-
-[nuxt-src]: https://img.shields.io/badge/Nuxt-020420?logo=nuxt
-[nuxt-href]: https://nuxt.com
-
-[stackblitz-src]: https://developer.stackblitz.com/img/open_in_stackblitz_small.svg
-[stackblitz-href]: https://stackblitz.com/github/rutbergphilip/nuxt-safe-action/tree/main/example

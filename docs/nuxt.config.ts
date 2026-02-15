@@ -19,6 +19,7 @@ export default defineNuxtConfig({
 
   site: {
     name: 'nuxt-safe-action',
+    url: 'https://nuxt-safe-action.vercel.app',
   },
 
   runtimeConfig: {

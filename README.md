@@ -8,6 +8,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82)](https://npm.chart.dev/nuxt-safe-action)
 [![License](https://img.shields.io/npm/l/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82)](https://npmjs.com/package/nuxt-safe-action)
 [![Nuxt](https://img.shields.io/badge/Nuxt-020420?logo=nuxt)](https://nuxt.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
 Type-safe server actions for Nuxt.
 
@@ -46,6 +47,21 @@ const { execute, data, status, validationErrors } = useAction(createPost)
 - **Auto route generation** - Drop files in `server/actions/` and routes are created for you
 - **H3Event access** - Full request context available in middleware and handlers
 - **Nuxt-native** - Auto-imports, familiar conventions, works out of the box
+
+## Why nuxt-safe-action?
+
+Calling server endpoints with raw `$fetch` is untyped, error-prone, and forces you to manually handle validation, error formatting, and loading states. `nuxt-safe-action` gives you a declarative builder that validates input with Zod, chains middleware for auth and logging, and returns reactive state on the client, all with full end-to-end type inference. It works with Nuxt 3 and Nuxt 4, supports both Zod v3 and v4, and adds minimal bundle overhead.
+
+### Comparison
+
+| | `$fetch` | tRPC-nuxt | **nuxt-safe-action** |
+|---|---|---|---|
+| Type safety | manual | full | full |
+| Input validation | manual | via zod | built-in zod |
+| Middleware | manual | via context | composable chain |
+| File-based routing | N/A | no | auto-generated |
+| Vue composable | no | no | `useAction` |
+| Bundle overhead | none | heavy | minimal |
 
 ## Quick Setup
 

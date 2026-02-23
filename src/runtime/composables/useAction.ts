@@ -46,37 +46,23 @@ export function useAction<TInput, TOutput, TServerError = string>(
 
     callbacks?.onExecute?.({ input })
 
+    const url = actionMethod === 'GET' && input != null
+      ? `/api/_actions/${actionPath}?input=${encodeURIComponent(JSON.stringify(input))}`
+      : `/api/_actions/${actionPath}`
+
+    // Detached mode: use raw fetch() which survives SPA navigation
+    if (callbacks?.detached) {
+      return executeDetached(url, input)
+    }
+
     try {
       const fetchOptions: Parameters<typeof $fetch>[1] = actionMethod === 'GET'
         ? { method: 'GET' }
         : { method: actionMethod as 'POST' | 'PUT' | 'PATCH' | 'DELETE', body: input as Record<string, unknown> }
 
-      const url = actionMethod === 'GET' && input != null
-        ? `/api/_actions/${actionPath}?input=${encodeURIComponent(JSON.stringify(input))}`
-        : `/api/_actions/${actionPath}`
-
       const result = await $fetch<ActionResult<TOutput, TServerError>>(url, fetchOptions)
 
-      if (result.data !== undefined) {
-        data.value = result.data
-        status.value = 'hasSucceeded'
-        callbacks?.onSuccess?.({ data: result.data, input })
-      } else if (result.serverError !== undefined) {
-        serverError.value = result.serverError
-        status.value = 'hasErrored'
-        callbacks?.onError?.({
-          error: { serverError: result.serverError },
-          input,
-        })
-      } else if (result.validationErrors !== undefined) {
-        validationErrors.value = result.validationErrors
-        status.value = 'hasErrored'
-        callbacks?.onError?.({
-          error: { validationErrors: result.validationErrors },
-          input,
-        })
-      }
-
+      processResult(result, input)
       callbacks?.onSettled?.({ result, input })
       return result
     } catch (fetchError) {
@@ -94,6 +80,82 @@ export function useAction<TInput, TOutput, TServerError = string>(
       callbacks?.onSettled?.({ result, input })
 
       return result
+    }
+  }
+
+  /**
+   * Execute using raw fetch() — request survives SPA navigation.
+   * Parses the response into the same ActionResult shape and updates
+   * all reactive refs and callbacks identically to the $fetch path.
+   */
+  async function executeDetached(url: string, input: TInput): Promise<ActionResult<TOutput, TServerError>> {
+    try {
+      const fetchInit: RequestInit = actionMethod === 'GET'
+        ? { method: 'GET' }
+        : {
+            method: actionMethod,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(input),
+          }
+
+      const response = await fetch(url, fetchInit)
+
+      if (!response.ok) {
+        const message = `HTTP ${response.status}`
+        serverError.value = message as TServerError
+        status.value = 'hasErrored'
+
+        const result: ActionResult<TOutput, TServerError> = {
+          serverError: message as TServerError,
+        }
+
+        callbacks?.onError?.({ error: { serverError: message as TServerError }, input })
+        callbacks?.onSettled?.({ result, input })
+        return result
+      }
+
+      const result = (await response.json()) as ActionResult<TOutput, TServerError>
+
+      processResult(result, input)
+      callbacks?.onSettled?.({ result, input })
+      return result
+    } catch (fetchError) {
+      const message =
+        fetchError instanceof Error ? fetchError.message : 'An unexpected error occurred'
+
+      serverError.value = message as TServerError
+      status.value = 'hasErrored'
+
+      const result: ActionResult<TOutput, TServerError> = {
+        serverError: message as TServerError,
+      }
+
+      callbacks?.onError?.({ error: { serverError: message as TServerError }, input })
+      callbacks?.onSettled?.({ result, input })
+      return result
+    }
+  }
+
+  /** Shared result processing for both $fetch and detached paths. */
+  function processResult(result: ActionResult<TOutput, TServerError>, input: TInput): void {
+    if (result.data !== undefined) {
+      data.value = result.data
+      status.value = 'hasSucceeded'
+      callbacks?.onSuccess?.({ data: result.data, input })
+    } else if (result.serverError !== undefined) {
+      serverError.value = result.serverError
+      status.value = 'hasErrored'
+      callbacks?.onError?.({
+        error: { serverError: result.serverError },
+        input,
+      })
+    } else if (result.validationErrors !== undefined) {
+      validationErrors.value = result.validationErrors
+      status.value = 'hasErrored'
+      callbacks?.onError?.({
+        error: { validationErrors: result.validationErrors },
+        input,
+      })
     }
   }
 

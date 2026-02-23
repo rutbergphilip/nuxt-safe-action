@@ -119,4 +119,18 @@ export interface UseActionCallbacks<TInput, TOutput, TServerError = string> {
   }) => void
   onSettled?: (args: { result: ActionResult<TOutput, TServerError>; input: TInput }) => void
   onExecute?: (args: { input: TInput }) => void
+
+  /**
+   * Use raw `fetch()` instead of `$fetch` for `executeAsync`.
+   *
+   * When `true`, the request survives SPA navigation — the browser completes
+   * the request even after the initiating component is destroyed. Nuxt's `$fetch`
+   * (ofetch) is tied to the component lifecycle and gets aborted on navigation,
+   * producing DOMException / NetworkError.
+   *
+   * The response is still parsed into the standard `ActionResult` shape and all
+   * reactive refs (`data`, `serverError`, `status`) and callbacks (`onSuccess`,
+   * `onError`, `onSettled`) are updated normally.
+   */
+  detached?: boolean
 }

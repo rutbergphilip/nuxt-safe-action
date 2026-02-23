@@ -120,7 +120,7 @@ const {
       <div class="hero-container">
         <div class="hero-badge">
           <UIcon name="i-lucide-sparkles" class="size-3.5 text-emerald-400" />
-          <span>v{{ version }} &mdash; Now with HTTP method support</span>
+          <span>v{{ version }} &mdash; Now with detached mode for navigation-safe fetches</span>
         </div>
 
         <h1 class="hero-title">

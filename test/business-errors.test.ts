@@ -87,7 +87,7 @@ describe('declared business failures', () => {
   it('normalizes hostile field names, clones error arrays, and rejects malformed errors', async () => {
     const errors = Object.assign(Object.create({ inherited: ['Not public'] }), { constructor: ['Required'], ['__proto__']: ['Invalid'], _errors: ['Root message'] })
     Object.defineProperty(errors, '__proto__', { value: ['Invalid'], enumerable: true })
-    const action = createSafeActionClient().errors({ DENIED: 'Denied' }).schema(z.record(z.unknown())).action(({ fail }) => fail('DENIED', { validationErrors: errors }))
+    const action = createSafeActionClient().errors({ DENIED: 'Denied' }).schema(z.record(z.string(), z.unknown())).action(({ fail }) => fail('DENIED', { validationErrors: errors }))
     const result = await action._execute({}, event)
     expect(Object.getPrototypeOf(result.validationErrors)).toBeNull()
     expect(result.validationErrors).toEqual({ constructor: ['Required'], ['__proto__']: ['Invalid'], _errors: ['Root message'] })

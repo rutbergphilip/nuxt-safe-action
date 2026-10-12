@@ -32,7 +32,7 @@ Validate contracts with Zod, Valibot, ArkType, Yup, or Standard Schema. Build fo
 
 ## Validated contracts, predictable forms
 
-Input/output types flow through generated action references, including schema transforms. Typed middleware provides request context. `useAction` gives the latest request ownership of state, explicit cancellation, and callbacks. `useFormAction` adds typed values and snapshot submission; `useOptimisticAction` adds immutable updates with guarded rollback.
+Input/output types flow through generated action references, including schema transforms. Typed middleware provides request context. `useAction` gives the latest request ownership of state, explicit cancellation, and callbacks. `useFormAction` adds typed nested fields, dirty/touched state, optional client validation and snapshot submission; `useOptimisticAction` adds immutable updates with guarded rollback. Declare expected business failures with `.errors()` and `fail()`. Refresh explicitly selected Nuxt query keys/tags after successful mutations, with separate refresh errors.
 
 ## Start with working examples
 

@@ -5,6 +5,7 @@ import {
   defineNuxtModule,
   createResolver,
   addImportsDir,
+  addImports,
   addServerImports,
   addTemplate,
   useLogger,
@@ -35,6 +36,7 @@ export default defineNuxtModule<ModuleOptions>({
     const { resolve } = createResolver(import.meta.url)
 
     addImportsDir(resolve('./runtime/composables'))
+    addImports({ name: 'toFormErrors', from: resolve('./runtime/utils/toFormErrors') })
 
     addServerImports([
       { name: 'createSafeActionClient', from: resolve('./runtime/server/createSafeActionClient') },
@@ -49,7 +51,17 @@ export default defineNuxtModule<ModuleOptions>({
     const fullActionsDir = resolvePath(nuxt.options.serverDir, actionsDir)
     const actionHandlerPath = resolve('./runtime/server/handler')
 
+    // Append only after Nitro resolves its default exclusions; configuring exclude
+    // earlier would suppress Nitro's .git/build/node_modules defaults.
+    nuxt.hook('nitro:init', (nitro) => {
+      if (nitro.options.imports !== false) {
+        const exclude = nitro.options.imports.exclude
+        nitro.options.imports.exclude = [...(Array.isArray(exclude) ? exclude : exclude ? [exclude] : []), `${resolve('./runtime/server')}/**`]
+      }
+    })
+
     nuxt.hook('nitro:config', (nitroConfig) => {
+
       if (!existsSync(fullActionsDir)) {
         logger.info(
           `No actions directory found at ${fullActionsDir} — skipping action route generation.`,

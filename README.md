@@ -14,6 +14,28 @@ Define actions in `server/actions/`, compose typed middleware, and import genera
 
 [Documentation](https://nuxt-safe-action.vercel.app) · [Runnable example](./example) · [StackBlitz](https://stackblitz.com/github/rutbergphilip/nuxt-safe-action/tree/main/example) · [Changelog](./CHANGELOG.md)
 
+## Advanced forms and mutations
+
+Version 0.7 adds declared business failures, nested form state, and successful-mutation refresh of ordinary Nuxt queries. Existing builder methods, error envelopes and basic form bindings remain compatible.
+
+```ts
+const action = createSafeActionClient()
+  .schema(profileSchema)
+  .errors({ EMAIL_TAKEN: 'This email is already registered' })
+  .action(({ parsedInput, fail }) => {
+    if (parsedInput.profile.email === 'taken@example.com') {
+      fail('EMAIL_TAKEN', { validationErrors: { 'profile.email': ['Use a different email'] } })
+    }
+    return { profile: parsedInput.profile }
+  })
+```
+
+`useFormAction` adds typed field getters/setters, dirty/touched tracking, and optional client validation while preserving raw submission snapshots and newer edits. `toFormErrors()` adapts dotted errors to `{ name, message }` UI messages, keeping root errors separate.
+
+Register an ordinary `useAsyncData` key with `useActionQueryTags(key, ['profiles'])`, then use `invalidate: { keys, tags }` on a mutation. Successful latest executions refresh matching Nuxt keys; failures, stale requests, and cancellation do not. Refresh errors stay separate from successful writes. Nuxt continues to own caching and hydration.
+
+[Advanced runnable profile form](./example) · [Forms](https://nuxt-safe-action.vercel.app/guide/forms) · [Business errors](https://nuxt-safe-action.vercel.app/guide/error-handling) · [Query refresh](https://nuxt-safe-action.vercel.app/guide/queries)
+
 ## Quick setup
 
 ```bash
@@ -120,7 +142,7 @@ const action = createSafeActionClient()
 | Client method | Behavior |
 |---|---|
 | `execute(input)` | Starts execution; returns `void` |
-| `executeAsync(input)` | Resolves `{ data?, serverError?, validationErrors? }`; does not unwrap data |
+| `executeAsync(input)` | Resolves `{ data?, businessError?, serverError?, validationErrors? }`; does not unwrap data |
 | `cancel()` | Invalidates pending updates, aborts owned requests, returns status to idle |
 | `reset()` | Cancels pending execution and clears result state |
 

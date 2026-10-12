@@ -1,7 +1,7 @@
 {
   "name": "nuxt-safe-action",
-  "version": "0.6.0",
-  "description": "Type-safe Nuxt server actions with Standard Schema validation, forms and optimistic updates",
+  "version": "0.7.0",
+  "description": "Type-safe Nuxt actions with advanced forms, declared business errors and mutation-driven query refresh",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rutbergphilip/nuxt-safe-action.git"
@@ -33,7 +33,9 @@
     "valibot",
     "arktype",
     "optimistic-updates",
-    "yup"
+    "yup",
+    "business-errors",
+    "query-invalidation"
   ],
   "author": "Philip Rutberg",
   "license": "MIT",

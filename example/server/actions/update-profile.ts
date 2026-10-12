@@ -1,16 +1,21 @@
 import { z } from 'zod'
 import { createSafeActionClient, returnValidationErrors } from '#safe-action'
+import { profileSchema } from '#shared/profile'
+import { profileActivity } from '../utils/profile-state'
 
-// Demo only: validates and echoes a profile, without persistent storage.
+// Demo only: a fixed duplicate and delayed response demonstrate form state; no profiles are stored.
 export default createSafeActionClient()
-  .schema(z.object({ profile: z.object({
-    name: z.string().trim().min(2, 'Use at least two characters'),
-    email: z.string().email('Enter a valid email'),
-  }) }))
-  .outputSchema(z.object({ profile: z.object({ name: z.string(), email: z.string() }) }))
-  .action(({ parsedInput }) => {
+  .schema(profileSchema)
+  .errors({ EMAIL_TAKEN: 'This email is already registered' })
+  .outputSchema(z.object({ profile: z.object({ name: z.string(), email: z.string() }), acceptedProfiles: z.number() }))
+  .action(async ({ parsedInput, fail }) => {
+    await new Promise(resolve => setTimeout(resolve, 750))
+    if (parsedInput.profile.email.toLowerCase() === 'taken@example.com') {
+      fail('EMAIL_TAKEN', { validationErrors: { 'profile.email': ['Use a different email'] } })
+    }
     if (parsedInput.profile.name.toLowerCase() === 'admin') {
       returnValidationErrors({ 'profile.name': ['This name is reserved'] })
     }
-    return { profile: parsedInput.profile }
+    profileActivity.acceptedProfiles++
+    return { profile: parsedInput.profile, acceptedProfiles: profileActivity.acceptedProfiles }
   })

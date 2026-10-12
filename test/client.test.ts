@@ -213,7 +213,7 @@ describe('useFormAction', () => {
     expect(JSON.parse(fetch.mock.calls[0]![1].body).profile.name).toBe('submitted')
     response.resolve({ validationErrors: { 'profile.name': ['Taken'], '_root': ['Root'], '_errors': ['Malformed'] } })
     await pending
-    expect(client.fieldErrors.value).toEqual({ 'profile.name': ['Taken'] })
+    expect(client.fieldErrors.value).toEqual({}) // The field was edited after submission.
     expect(client.rootErrors.value).toEqual(['Root', 'Malformed'])
     initialValues.profile.name = 'external change'
     client.reset()

@@ -1,4 +1,8 @@
 import { ref, computed, readonly, getCurrentScope, onScopeDispose } from 'vue'
+import { useNuxtApp, refreshNuxtData } from '#app'
+import { resolveQueryKeys } from '../utils/queryTags'
+import { registerActionOwnership } from '../utils/actionOwnership'
+import type { ActionInvalidation } from '../utils/queryTags'
 import type { SafeAction, SafeActionReference, ActionResult, ActionStatus, ValidationErrors, UseActionReturn, UseActionCallbacks } from '../types'
 
 export interface ActionRequestOptions {
@@ -10,22 +14,28 @@ export interface ActionRequestOptions {
   /** Opt in to aborting owned requests when the component scope is disposed. */
   abortOnDispose?: boolean
   cancelPrevious?: boolean
+  /** Refresh only these explicitly selected Nuxt keys / opt-in tags after success. */
+  invalidate?: ActionInvalidation
 }
 
-export type UseActionOptions<TInput, TOutput, TServerError = string> = UseActionCallbacks<TInput, TOutput, TServerError> & ActionRequestOptions
+export type UseActionOptions<TInput, TOutput, TServerError = string, TBusinessError = never> = UseActionCallbacks<TInput, TOutput, TServerError, TBusinessError> & ActionRequestOptions
 
 /** Latest execution owns reactive state; each call still resolves its own result. */
-export function useAction<TInput, TOutput, TServerError = string>(
-  action: SafeAction<TInput, TOutput, TServerError> | SafeActionReference<TInput, TOutput, TServerError>,
-  options: UseActionOptions<TInput, TOutput, TServerError> = {},
-): UseActionReturn<TInput, TOutput, TServerError> & { cancel: () => void } {
-  const reference = action as SafeActionReference<TInput, TOutput, TServerError> & { __safeActionMethod?: string }
+export function useAction<TInput, TOutput, TServerError = string, TBusinessError = never>(
+  action: SafeAction<TInput, TOutput, TServerError, TBusinessError> | SafeActionReference<TInput, TOutput, TServerError, TBusinessError>,
+  options: UseActionOptions<TInput, TOutput, TServerError, TBusinessError> = {},
+): UseActionReturn<TInput, TOutput, TServerError, TBusinessError> & { cancel: () => void } {
+  const reference = action as SafeActionReference<TInput, TOutput, TServerError, TBusinessError> & { __safeActionMethod?: string }
   const actionPath = reference.__safeActionPath
   const actionMethod = reference.__safeActionMethod || 'POST'
   const data = ref<TOutput>() as import('vue').Ref<TOutput | undefined>
   const serverError = ref<TServerError>() as import('vue').Ref<TServerError | undefined>
   const validationErrors = ref<ValidationErrors>()
   const status = ref<ActionStatus>('idle')
+  const businessError = ref<TBusinessError>() as import('vue').Ref<TBusinessError | undefined>
+  const isRefreshing = ref(false)
+  const refreshError = ref<Error | null>(null)
+  const nuxtApp = options.invalidate ? useNuxtApp() : undefined
   const requests = new Set<AbortController>()
   let revision = 0
 
@@ -39,10 +49,16 @@ export function useAction<TInput, TOutput, TServerError = string>(
     try { void Promise.resolve(callback()).catch(diagnose) } catch (error) { diagnose(error) }
   }
 
-  function cancel(): void {
+  function invalidate(): void {
     revision++
-    for (const controller of requests) controller.abort()
     status.value = 'idle'
+    isRefreshing.value = false
+    refreshError.value = null
+  }
+
+  function cancel(): void {
+    invalidate()
+    for (const controller of requests) controller.abort()
   }
 
   function reset(): void {
@@ -50,11 +66,12 @@ export function useAction<TInput, TOutput, TServerError = string>(
     data.value = undefined
     serverError.value = undefined
     validationErrors.value = undefined
+    businessError.value = undefined
   }
 
   if (options.abortOnDispose && getCurrentScope()) onScopeDispose(cancel)
 
-  async function executeAsync(input: TInput): Promise<ActionResult<TOutput, TServerError>> {
+  async function executeAsync(input: TInput): Promise<ActionResult<TOutput, TServerError, TBusinessError>> {
     if (options.cancelPrevious) cancel()
     const ownRevision = ++revision
     const controller = new AbortController()
@@ -62,6 +79,9 @@ export function useAction<TInput, TOutput, TServerError = string>(
     serverError.value = undefined
     validationErrors.value = undefined
     status.value = 'executing'
+    businessError.value = undefined
+    isRefreshing.value = false
+    refreshError.value = null
     notify(options.onExecute && (() => options.onExecute!({ input })))
     let timer: ReturnType<typeof setTimeout> | undefined
     let rejectAbort: (error: Error) => void = () => {}
@@ -75,7 +95,7 @@ export function useAction<TInput, TOutput, TServerError = string>(
       timer = setTimeout(() => controller.abort(new Error('Action request timed out')), options.timeout)
     }
 
-    let result: ActionResult<TOutput, TServerError>
+    let result: ActionResult<TOutput, TServerError, TBusinessError>
     try {
       if (typeof actionPath !== 'string' || !actionPath) throw new Error('Expected a typed action reference from #safe-action/actions')
       const url = actionMethod === 'GET' && input !== undefined
@@ -101,7 +121,7 @@ export function useAction<TInput, TOutput, TServerError = string>(
       }
       const payload = await Promise.race([aborted, transport()])
       if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Invalid action response')
-      result = payload as ActionResult<TOutput, TServerError>
+      result = payload as ActionResult<TOutput, TServerError, TBusinessError>
     } catch (error) {
       result = { serverError: (error instanceof Error ? error.message : 'An unexpected error occurred') as TServerError }
     } finally {
@@ -112,16 +132,30 @@ export function useAction<TInput, TOutput, TServerError = string>(
     }
 
     if (ownRevision === revision) {
-      if (result.serverError !== undefined || result.validationErrors !== undefined) {
+      if (result.serverError !== undefined || result.validationErrors !== undefined || result.businessError !== undefined) {
         serverError.value = result.serverError
         validationErrors.value = result.validationErrors
+        businessError.value = result.businessError
         status.value = 'hasErrored'
-        notify(options.onError && (() => options.onError!({ error: { serverError: result.serverError, validationErrors: result.validationErrors }, input })))
+        notify(options.onError && (() => options.onError!({ error: { serverError: result.serverError, validationErrors: result.validationErrors, businessError: result.businessError }, input })))
       } else {
         // A void action serializes as {}; undefined is a valid success value.
         data.value = result.data
         status.value = 'hasSucceeded'
         notify(options.onSuccess && (() => options.onSuccess!({ data: result.data as TOutput, input })))
+      }
+      if (ownRevision === revision && result.serverError === undefined && result.validationErrors === undefined && result.businessError === undefined && options.invalidate && nuxtApp) {
+        try {
+          const keys = resolveQueryKeys(nuxtApp, options.invalidate)
+          if (keys.length) {
+            isRefreshing.value = true
+            await nuxtApp.runWithContext(() => refreshNuxtData(keys))
+          }
+        } catch (error) {
+          if (ownRevision === revision) refreshError.value = error instanceof Error ? error : new Error(String(error))
+        } finally {
+          if (ownRevision === revision) isRefreshing.value = false
+        }
       }
       if (ownRevision === revision) notify(options.onSettled && (() => options.onSettled!({ result, input })))
     }
@@ -129,8 +163,10 @@ export function useAction<TInput, TOutput, TServerError = string>(
   }
 
   function execute(input: TInput): void { void executeAsync(input) }
-  return {
+  const state = {
     execute, executeAsync, cancel, reset,
+    businessError: readonly(businessError) as Readonly<import('vue').Ref<TBusinessError | undefined>>,
+    isRefreshing: readonly(isRefreshing), refreshError: readonly(refreshError),
     data: readonly(data) as Readonly<import('vue').Ref<TOutput | undefined>>,
     serverError: readonly(serverError) as Readonly<import('vue').Ref<TServerError | undefined>>,
     validationErrors: readonly(validationErrors) as Readonly<import('vue').Ref<ValidationErrors | undefined>>, status: readonly(status),
@@ -139,4 +175,6 @@ export function useAction<TInput, TOutput, TServerError = string>(
     hasSucceeded: computed(() => status.value === 'hasSucceeded'),
     hasErrored: computed(() => status.value === 'hasErrored'),
   }
+  registerActionOwnership(state, invalidate)
+  return state
 }

@@ -42,3 +42,15 @@ export class ActionValidationError extends Error {
 export function returnValidationErrors(errors: ValidationErrors): never {
   throw new ActionValidationError(errors)
 }
+
+/** Internal helper failure; an action verifies declaration identity before exposure. */
+export class DeclaredBusinessFailure extends Error {
+  constructor(
+    public readonly code: string,
+    public readonly declarations: Readonly<Record<string, string>>,
+    public readonly validationErrors?: ValidationErrors,
+  ) {
+    super('Declared business failure')
+    this.name = 'DeclaredBusinessFailure'
+  }
+}

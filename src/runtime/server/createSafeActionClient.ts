@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { H3Event } from 'h3'
-import type { ZodType, ZodError } from 'zod'
 import type {
   SafeAction,
   SafeActionClientOpts,
@@ -9,21 +8,12 @@ import type {
   MiddlewareFn,
   ActionHandler,
   ActionConfig,
-  ValidationErrors,
+  ActionSchema,
+  InferSchemaInput,
+  InferSchemaOutput,
 } from '../types'
 import { ActionError, ActionValidationError } from './errors'
-
-function formatZodErrors(zodError: ZodError): ValidationErrors {
-  const errors: ValidationErrors = {}
-  for (const issue of zodError.issues) {
-    const path = issue.path.join('.') || '_root'
-    if (!errors[path]) {
-      errors[path] = []
-    }
-    errors[path]!.push(issue.message)
-  }
-  return errors
-}
+import { formatValidationErrors, validateSchema } from './validation'
 
 async function executeMiddlewareChain<TServerError>(
   middlewares: MiddlewareFn<any, any>[],
@@ -40,22 +30,49 @@ async function executeMiddlewareChain<TServerError>(
     const nextExecute = execute
     const middleware = middlewares[i]!
     execute = async (ctx: any) => {
-      let result: ActionResult<any, TServerError> | undefined
-      await middleware({
-        ctx,
-        clientInput,
-        metadata,
-        event,
-        next: async ({ ctx: newCtx }) => {
-          result = await nextExecute(newCtx)
-          return { ctx: newCtx }
-        },
-      })
-      if (result === undefined) {
+      let pending: Promise<ActionResult<any, TServerError>> | undefined
+      let middlewareOpen = true
+      let called = false
+      let repeated = false
+      try {
+        await middleware({
+          ctx,
+          clientInput,
+          metadata,
+          event,
+          next: ({ ctx: newCtx }) => {
+            if (!middlewareOpen) {
+              const rejected = Promise.reject(new Error('Middleware cannot call next() after it has settled.'))
+              void rejected.catch(() => {})
+              return rejected
+            }
+            if (called) {
+              repeated = true
+              throw new Error('Middleware must call next() exactly once.')
+            }
+            called = true
+            pending = nextExecute(newCtx)
+            const continuation = pending.then(() => ({ ctx: newCtx }))
+            // A middleware may forget to await next(); still settle it below.
+            void continuation.catch(() => {})
+            return continuation
+          },
+        })
+      } catch (error) {
+        middlewareOpen = false
+        // Do not leave an already-started mutation or rejection detached.
+        await pending?.catch(() => {})
+        throw error
+      } finally {
+        middlewareOpen = false
+      }
+      if (!pending) {
         throw new Error(
           'Middleware did not call next(). Every middleware must call next() to continue the chain.',
         )
       }
+      const result = await pending
+      if (repeated) throw new Error('Middleware must call next() exactly once.')
       return result
     }
   }
@@ -63,17 +80,17 @@ async function executeMiddlewareChain<TServerError>(
   return execute(initialCtx)
 }
 
-class SafeActionBuilder<TCtx, TInput, TServerError> {
+class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema extends ActionSchema | undefined = undefined> {
   private _middlewares: MiddlewareFn<any, any>[]
-  private _inputSchema?: ZodType
-  private _outputSchema?: ZodType
+  private _inputSchema?: ActionSchema
+  private _outputSchema?: ActionSchema
   private _metadata: ActionMetadata
   private _handleServerError?: (error: Error) => TServerError
 
   constructor(opts: {
     middlewares: MiddlewareFn<any, any>[]
-    inputSchema?: ZodType
-    outputSchema?: ZodType
+    inputSchema?: ActionSchema
+    outputSchema?: ActionSchema
     metadata: ActionMetadata
     handleServerError?: (error: Error) => TServerError
   }) {
@@ -85,11 +102,11 @@ class SafeActionBuilder<TCtx, TInput, TServerError> {
   }
 
   /**
-   * Add a Zod schema for input validation.
+   * Add a validation schema for input validation.
    */
-  schema<TSchema extends ZodType>(
+  schema<TSchema extends ActionSchema>(
     schema: TSchema,
-  ): SafeActionBuilder<TCtx, TSchema extends ZodType<infer T> ? T : never, TServerError> {
+  ): SafeActionBuilder<TCtx, InferSchemaInput<TSchema>, InferSchemaOutput<TSchema>, TServerError, TOutputSchema> {
     return new SafeActionBuilder({
       middlewares: this._middlewares,
       inputSchema: schema,
@@ -100,11 +117,11 @@ class SafeActionBuilder<TCtx, TInput, TServerError> {
   }
 
   /**
-   * Add a Zod schema for output validation.
+   * Add a validation schema for output validation.
    */
-  outputSchema<TSchema extends ZodType>(
+  outputSchema<TSchema extends ActionSchema>(
     schema: TSchema,
-  ): SafeActionBuilder<TCtx, TInput, TServerError> {
+  ): SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TSchema> {
     return new SafeActionBuilder({
       middlewares: this._middlewares,
       inputSchema: this._inputSchema,
@@ -120,7 +137,7 @@ class SafeActionBuilder<TCtx, TInput, TServerError> {
    */
   use<TNewCtx>(
     middleware: MiddlewareFn<TCtx, TNewCtx>,
-  ): SafeActionBuilder<TNewCtx, TInput, TServerError> {
+  ): SafeActionBuilder<TNewCtx, TInput, TParsedInput, TServerError, TOutputSchema> {
     return new SafeActionBuilder({
       middlewares: [...this._middlewares, middleware as MiddlewareFn<any, any>],
       inputSchema: this._inputSchema,
@@ -134,7 +151,7 @@ class SafeActionBuilder<TCtx, TInput, TServerError> {
    * Attach metadata to the action (e.g. action name, tags).
    * Accessible in middleware via `args.metadata`.
    */
-  metadata(meta: ActionMetadata): SafeActionBuilder<TCtx, TInput, TServerError> {
+  metadata(meta: ActionMetadata): SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema> {
     return new SafeActionBuilder({
       middlewares: this._middlewares,
       inputSchema: this._inputSchema,
@@ -149,8 +166,8 @@ class SafeActionBuilder<TCtx, TInput, TServerError> {
    * Returns a `SafeAction` object that can be exported from `server/actions/`.
    */
   action<TOutput>(
-    handler: ActionHandler<TCtx, TInput, TOutput>,
-  ): SafeAction<TInput, TOutput, TServerError> {
+    handler: ActionHandler<TCtx, TParsedInput, TOutput>,
+  ): SafeAction<TInput, TOutputSchema extends ActionSchema ? InferSchemaOutput<TOutputSchema> : TOutput, TServerError> {
     const config: ActionConfig<TServerError> = {
       middlewares: this._middlewares,
       inputSchema: this._inputSchema,
@@ -162,7 +179,7 @@ class SafeActionBuilder<TCtx, TInput, TServerError> {
 
     return {
       _execute: (rawInput: unknown, event: H3Event) => executeAction(rawInput, event, config),
-    } as SafeAction<TInput, TOutput, TServerError>
+    } as SafeAction<TInput, TOutputSchema extends ActionSchema ? InferSchemaOutput<TOutputSchema> : TOutput, TServerError>
   }
 }
 
@@ -182,11 +199,11 @@ async function executeAction<TServerError>(
         // 1. Validate input
         let parsedInput = rawInput
         if (config.inputSchema) {
-          const result = config.inputSchema.safeParse(rawInput)
-          if (!result.success) {
-            return { validationErrors: formatZodErrors(result.error) }
+          const result = await validateSchema(config.inputSchema, rawInput)
+          if (result.issues) {
+            return { validationErrors: formatValidationErrors(result.issues) }
           }
-          parsedInput = result.data
+          parsedInput = result.value
         }
 
         // 2. Run handler
@@ -198,13 +215,13 @@ async function executeAction<TServerError>(
 
         // 3. Validate output (optional)
         if (config.outputSchema) {
-          const result = config.outputSchema.safeParse(data)
-          if (!result.success) {
+          const result = await validateSchema(config.outputSchema, data)
+          if (result.issues) {
             throw new Error(
-              `Output validation failed: ${JSON.stringify(formatZodErrors(result.error))}`,
+              `Output validation failed: ${JSON.stringify(formatValidationErrors(result.issues))}`,
             )
           }
-          return { data: result.data }
+          return { data: result.value }
         }
 
         return { data }
@@ -223,7 +240,12 @@ async function executeAction<TServerError>(
 
     // Unexpected errors — pass through the user's error handler
     if (config.handleServerError) {
-      return { serverError: config.handleServerError(error as Error) }
+      try {
+        const normalizedError = error instanceof Error ? error : new Error(String(error))
+        return { serverError: config.handleServerError(normalizedError) }
+      } catch {
+        return { serverError: 'An unexpected error occurred' as TServerError }
+      }
     }
 
     // Fallback
@@ -244,7 +266,7 @@ async function executeAction<TServerError>(
  */
 export function createSafeActionClient<TServerError = string>(
   opts: SafeActionClientOpts<TServerError> = {},
-): SafeActionBuilder<Record<string, never>, undefined, TServerError> {
+): SafeActionBuilder<Record<string, never>, undefined, undefined, TServerError> {
   return new SafeActionBuilder({
     middlewares: [],
     metadata: {},

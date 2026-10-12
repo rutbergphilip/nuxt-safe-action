@@ -1,6 +1,6 @@
 ---
 title: Home
-description: Type-safe server actions for Nuxt with Zod validation, composable middleware, and reactive Vue composables.
+description: Type-safe Nuxt server actions with Standard Schema validation, typed forms, middleware, and optimistic updates.
 navigation: false
 layout: page
 ---
@@ -10,7 +10,7 @@ layout: page
 Type-safe Server Actions for [Nuxt]{style="color: var(--color-primary-500)"}
 
 #description
-Define actions on the server with Zod validation and middleware. Call them from the client with full type inference, reactive status tracking, and field-level validation errors.
+Validate contracts with Zod, Valibot, ArkType, or Standard Schema. Build forms and mutations with typed middleware, predictable errors, cancellation, and optimistic updates.
 
 #links
   :::u-button
@@ -20,81 +20,28 @@ Define actions on the server with Zod validation and middleware. Call them from 
   ---
   Get Started
   :::
-
   :::u-button
   ---
   color: neutral
   variant: outline
-  icon: i-simple-icons-github
-  to: https://github.com/rutbergphilip/nuxt-safe-action
-  target: _blank
+  to: /guide/forms
   ---
-  View on GitHub
+  Form Recipes
   :::
 ::
 
-::code-group
-```ts [server/actions/create-post.ts]
-import { z } from 'zod'
-import { actionClient } from '../utils/action-client'
+## Validated contracts, predictable forms
 
-export default actionClient
-  .schema(z.object({
-    title: z.string().min(1).max(200),
-    body: z.string().min(1),
-  }))
-  .action(async ({ parsedInput }) => {
-    const post = await db.post.create({ data: parsedInput })
-    return { id: post.id, title: post.title }
-  })
-```
+Input/output types flow through generated action references, including schema transforms. Typed middleware provides request context. `useAction` gives the latest request ownership of state, explicit cancellation, and callbacks. `useFormAction` adds typed values and snapshot submission; `useOptimisticAction` adds immutable updates with guarded rollback.
 
-```vue [app/components/CreatePost.vue]
-<script setup lang="ts">
-import { createPost } from '#safe-action/actions'
+## Start with working examples
 
-const { execute, data, isExecuting, validationErrors } = useAction(createPost, {
-  onSuccess({ data }) {
-    console.log('Created:', data.title)
-  },
-})
-</script>
+- [Your first action](/getting-started/usage)
+- [HTML and Nuxt UI forms](/guide/forms)
+- [Authentication and ownership](/guide/authentication)
+- [Optimistic updates](/guide/optimistic-updates)
+- [Nuxt SSR queries](/guide/queries)
+- [Validator choice](/guide/validation)
+- [Choosing an abstraction](/guide/comparison)
 
-<template>
-  <form @submit.prevent="execute({ title: 'Hello', body: 'World' })">
-    <button :disabled="isExecuting">Create Post</button>
-    <p v-if="data">Created: {{ data.title }}</p>
-  </form>
-</template>
-```
-::
-
-::card-group
-  ::card{icon="i-heroicons-shield-check" title="End-to-end Type Safety"}
-  Input and output types flow from server to client automatically. No manual type definitions needed.
-  ::
-
-  ::card{icon="i-heroicons-check-badge" title="Input Validation"}
-  Zod schemas validate input before your handler runs. Validation errors are returned per-field.
-  ::
-
-  ::card{icon="i-heroicons-queue-list" title="Composable Middleware"}
-  Chain auth checks, logging, rate limiting, and more with fully typed context passing.
-  ::
-
-  ::card{icon="i-heroicons-arrow-path" title="Reactive Composable"}
-  `useAction` gives you `status`, `data`, `validationErrors`, and lifecycle callbacks out of the box.
-  ::
-
-  ::card{icon="i-heroicons-folder" title="Auto Route Generation"}
-  Drop files in `server/actions/` and API routes are created for you. Zero configuration.
-  ::
-
-  ::card{icon="i-heroicons-server" title="H3Event Access"}
-  Full request context available in middleware and handlers. Read cookies, headers, sessions.
-  ::
-
-  ::card{icon="i-heroicons-puzzle-piece" title="Nuxt-native"}
-  Auto-imports, familiar conventions, and works out of the box with your Nuxt app.
-  ::
-::
+The module focuses on the form and mutation path and composes with Nuxt's existing query tools. Actions require a server deployment. Application authorization, CSRF policy, persistence, and idempotency remain explicit.

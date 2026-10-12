@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.6.0
+
+### Features
+
+- Standard Schema v1 validation with Zod, Valibot, ArkType, and compliant validators; legacy Zod 3.20+ support retained.
+- Input/output transform inference, default input handling, and asynchronous input/output validation.
+- `useFormAction` with inferred values, snapshot submission, initial-value reset, and separate nested/root errors.
+- `useOptimisticAction` with immutable updates, replacement of pending operations, guarded rollback, and application-controlled reconciliation.
+- Explicit request cancellation, external abort signals, timeouts, dynamic headers, credential options, optional previous-request cancellation, and opt-in scope disposal.
+
+### Fixes
+
+- Older requests and reset-invalidated completions no longer overwrite current state or run completion callbacks.
+- Successful void actions settle correctly; callback failures no longer turn valid results into failures or cause duplicate settlement.
+- Both transports serialize JSON primitives consistently, and GET preserves explicit null input. Automatic mutation retries are disabled.
+- Malformed JSON/GET input is rejected before the handler; validation paths safely preserve nested/root errors.
+- Middleware continuations cannot execute a handler twice; already-started work is awaited even when middleware forgets to await `next()`.
+- Route discovery uses deterministic ordering, handles explicit POST/custom directories and method variants, and rejects ambiguous names/collisions.
+- Action-file additions/removals regenerate routes and references during development.
+
+### Documentation and verification
+
+- Working nested forms and optimistic success/rollback examples, Nuxt UI, authentication/ownership, Standard Schema, and Nuxt SSR-query recipes.
+- Clarified detached transport and cancellation limits, result semantics, middleware context replacement, and error exposure.
+- Nuxt 3/4 and Zod 3/4 CI matrix, additional validator/transport regression tests, packed-install checks, and documentation build in the release gate.
+- Existing `execute(): void`, `executeAsync(): Promise<ActionResult>`, callback argument shapes, and single-method exports preserved.
+
+## v0.5.0
+
+### Features
+
+- Added `detached: true` to select native browser fetch while preserving action-result and callback shapes.
+
+### Clarification
+
+- Selecting native fetch does not guarantee completion across page unload. Neither transport is automatically tied to component disposal; 0.6.0 makes cancellation and disposal behavior explicit.
+
 ## v0.4.0
 
 ### Features

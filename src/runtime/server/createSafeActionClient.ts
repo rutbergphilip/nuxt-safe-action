@@ -11,9 +11,10 @@ import type {
   ActionSchema,
   InferSchemaInput,
   InferSchemaOutput,
+  BusinessError,
 } from '../types'
-import { ActionError, ActionValidationError } from './errors'
-import { formatValidationErrors, validateSchema } from './validation'
+import { ActionError, ActionValidationError, DeclaredBusinessFailure } from './errors'
+import { formatValidationErrors, normalizeValidationErrors, validateSchema } from './validation'
 
 async function executeMiddlewareChain<TServerError>(
   middlewares: MiddlewareFn<any, any>[],
@@ -21,8 +22,8 @@ async function executeMiddlewareChain<TServerError>(
   clientInput: unknown,
   metadata: ActionMetadata,
   event: H3Event,
-  innerFn: (ctx: any) => Promise<ActionResult<any, TServerError>>,
-): Promise<ActionResult<any, TServerError>> {
+  innerFn: (ctx: any) => Promise<ActionResult<any, TServerError, unknown>>,
+): Promise<ActionResult<any, TServerError, unknown>> {
   // Build the chain from inside-out
   let execute = innerFn
 
@@ -30,7 +31,7 @@ async function executeMiddlewareChain<TServerError>(
     const nextExecute = execute
     const middleware = middlewares[i]!
     execute = async (ctx: any) => {
-      let pending: Promise<ActionResult<any, TServerError>> | undefined
+      let pending: Promise<ActionResult<any, TServerError, unknown>> | undefined
       let middlewareOpen = true
       let called = false
       let repeated = false
@@ -80,10 +81,11 @@ async function executeMiddlewareChain<TServerError>(
   return execute(initialCtx)
 }
 
-class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema extends ActionSchema | undefined = undefined> {
+class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema extends ActionSchema | undefined = undefined, TBusinessError = never> {
   private _middlewares: MiddlewareFn<any, any>[]
   private _inputSchema?: ActionSchema
   private _outputSchema?: ActionSchema
+  private _businessErrors: Readonly<Record<string, string>>
   private _metadata: ActionMetadata
   private _handleServerError?: (error: Error) => TServerError
 
@@ -92,11 +94,13 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
     inputSchema?: ActionSchema
     outputSchema?: ActionSchema
     metadata: ActionMetadata
+    businessErrors?: Readonly<Record<string, string>>
     handleServerError?: (error: Error) => TServerError
   }) {
     this._middlewares = opts.middlewares
     this._inputSchema = opts.inputSchema
     this._outputSchema = opts.outputSchema
+    this._businessErrors = opts.businessErrors || Object.freeze(Object.create(null))
     this._metadata = opts.metadata
     this._handleServerError = opts.handleServerError
   }
@@ -106,12 +110,13 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
    */
   schema<TSchema extends ActionSchema>(
     schema: TSchema,
-  ): SafeActionBuilder<TCtx, InferSchemaInput<TSchema>, InferSchemaOutput<TSchema>, TServerError, TOutputSchema> {
-    return new SafeActionBuilder({
+  ): SafeActionBuilder<TCtx, InferSchemaInput<TSchema>, InferSchemaOutput<TSchema>, TServerError, TOutputSchema, TBusinessError> {
+    return new SafeActionBuilder<TCtx, InferSchemaInput<TSchema>, InferSchemaOutput<TSchema>, TServerError, TOutputSchema, TBusinessError>({
       middlewares: this._middlewares,
       inputSchema: schema,
       outputSchema: this._outputSchema,
       metadata: this._metadata,
+      businessErrors: this._businessErrors,
       handleServerError: this._handleServerError,
     })
   }
@@ -121,12 +126,13 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
    */
   outputSchema<TSchema extends ActionSchema>(
     schema: TSchema,
-  ): SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TSchema> {
-    return new SafeActionBuilder({
+  ): SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TSchema, TBusinessError> {
+    return new SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TSchema, TBusinessError>({
       middlewares: this._middlewares,
       inputSchema: this._inputSchema,
       outputSchema: schema,
       metadata: this._metadata,
+      businessErrors: this._businessErrors,
       handleServerError: this._handleServerError,
     })
   }
@@ -137,12 +143,13 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
    */
   use<TNewCtx>(
     middleware: MiddlewareFn<TCtx, TNewCtx>,
-  ): SafeActionBuilder<TNewCtx, TInput, TParsedInput, TServerError, TOutputSchema> {
-    return new SafeActionBuilder({
+  ): SafeActionBuilder<TNewCtx, TInput, TParsedInput, TServerError, TOutputSchema, TBusinessError> {
+    return new SafeActionBuilder<TNewCtx, TInput, TParsedInput, TServerError, TOutputSchema, TBusinessError>({
       middlewares: [...this._middlewares, middleware as MiddlewareFn<any, any>],
       inputSchema: this._inputSchema,
       outputSchema: this._outputSchema,
       metadata: this._metadata,
+      businessErrors: this._businessErrors,
       handleServerError: this._handleServerError,
     })
   }
@@ -151,12 +158,32 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
    * Attach metadata to the action (e.g. action name, tags).
    * Accessible in middleware via `args.metadata`.
    */
-  metadata(meta: ActionMetadata): SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema> {
-    return new SafeActionBuilder({
+  metadata(meta: ActionMetadata): SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema, TBusinessError> {
+    return new SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema, TBusinessError>({
       middlewares: this._middlewares,
       inputSchema: this._inputSchema,
       outputSchema: this._outputSchema,
       metadata: { ...this._metadata, ...meta },
+      businessErrors: this._businessErrors,
+      handleServerError: this._handleServerError,
+    })
+  }
+
+  /** Declare intentional public failures without changing unexpected-error handling. */
+  errors<const TErrors extends Record<string, string>>(
+    errors: TErrors,
+  ): SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema, TBusinessError | BusinessError<Extract<keyof TErrors, string>>> {
+    const declarations: Record<string, string> = Object.assign(Object.create(null), this._businessErrors)
+    for (const [code, message] of Object.entries(errors)) {
+      if (typeof message !== 'string') throw new Error('Business error messages must be strings.')
+      declarations[code] = message
+    }
+    return new SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema, TBusinessError | BusinessError<Extract<keyof TErrors, string>>>({
+      middlewares: this._middlewares,
+      inputSchema: this._inputSchema,
+      outputSchema: this._outputSchema,
+      metadata: this._metadata,
+      businessErrors: Object.freeze(declarations),
       handleServerError: this._handleServerError,
     })
   }
@@ -166,20 +193,21 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
    * Returns a `SafeAction` object that can be exported from `server/actions/`.
    */
   action<TOutput>(
-    handler: ActionHandler<TCtx, TParsedInput, TOutput>,
-  ): SafeAction<TInput, TOutputSchema extends ActionSchema ? InferSchemaOutput<TOutputSchema> : TOutput, TServerError> {
+    handler: ActionHandler<TCtx, TParsedInput, TOutput, TBusinessError, TInput>,
+  ): SafeAction<TInput, TOutputSchema extends ActionSchema ? InferSchemaOutput<TOutputSchema> : TOutput, TServerError, TBusinessError> {
     const config: ActionConfig<TServerError> = {
       middlewares: this._middlewares,
       inputSchema: this._inputSchema,
       outputSchema: this._outputSchema,
       metadata: this._metadata,
-      handler: handler as ActionHandler<any, any, any>,
+      businessErrors: this._businessErrors,
+      handler: handler as ActionHandler<any, any, any, any>,
       handleServerError: this._handleServerError,
     }
 
     return {
       _execute: (rawInput: unknown, event: H3Event) => executeAction(rawInput, event, config),
-    } as SafeAction<TInput, TOutputSchema extends ActionSchema ? InferSchemaOutput<TOutputSchema> : TOutput, TServerError>
+    } as SafeAction<TInput, TOutputSchema extends ActionSchema ? InferSchemaOutput<TOutputSchema> : TOutput, TServerError, TBusinessError>
   }
 }
 
@@ -187,7 +215,8 @@ async function executeAction<TServerError>(
   rawInput: unknown,
   event: H3Event,
   config: ActionConfig<TServerError>,
-): Promise<ActionResult<any, TServerError>> {
+): Promise<ActionResult<any, TServerError, unknown>> {
+  const businessErrors = config.businessErrors || Object.freeze(Object.create(null)) as Readonly<Record<string, string>>
   try {
     return await executeMiddlewareChain(
       config.middlewares,
@@ -209,6 +238,15 @@ async function executeAction<TServerError>(
         // 2. Run handler
         const data = await config.handler({
           parsedInput,
+          fail: (code, options) => {
+            if (typeof code !== 'string' || !Object.hasOwn(businessErrors, code)) {
+              throw new Error('Undeclared business error code.')
+            }
+            const validationErrors = options?.validationErrors === undefined
+              ? undefined
+              : normalizeValidationErrors(options.validationErrors)
+            throw new DeclaredBusinessFailure(code, businessErrors, validationErrors)
+          },
           ctx,
           event,
         })
@@ -228,6 +266,14 @@ async function executeAction<TServerError>(
       },
     )
   } catch (error) {
+    // Only a helper failure from this action's declarations can expose a business code.
+    if (error instanceof DeclaredBusinessFailure && error.declarations === businessErrors && Object.hasOwn(businessErrors, error.code)) {
+      return {
+        businessError: { code: error.code, message: businessErrors[error.code]! },
+        ...(error.validationErrors === undefined ? {} : { validationErrors: error.validationErrors }),
+      }
+    }
+
     // Explicit validation errors thrown from the handler
     if (error instanceof ActionValidationError) {
       return { validationErrors: error.validationErrors }
@@ -260,14 +306,17 @@ async function executeAction<TServerError>(
  * import { createSafeActionClient } from '#safe-action'
  *
  * export const actionClient = createSafeActionClient({
- *   handleServerError: (e) => e.message,
+ *   handleServerError: (error) => {
+ *     console.error('Action failed:', error)
+ *     return 'Something went wrong. Please try again.'
+ *   },
  * })
  * ```
  */
 export function createSafeActionClient<TServerError = string>(
   opts: SafeActionClientOpts<TServerError> = {},
 ): SafeActionBuilder<Record<string, never>, undefined, undefined, TServerError> {
-  return new SafeActionBuilder({
+  return new SafeActionBuilder<Record<string, never>, undefined, undefined, TServerError>({
     middlewares: [],
     metadata: {},
     handleServerError: opts.handleServerError as ((error: Error) => TServerError) | undefined,

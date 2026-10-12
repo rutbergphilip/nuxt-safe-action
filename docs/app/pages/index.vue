@@ -53,7 +53,7 @@ const features = [
     icon: 'i-lucide-activity',
     title: 'Typed Forms & Optimistic Updates',
     description:
-      'Submit snapshots of typed form values, display nested errors, and apply optimistic changes with guarded rollback.',
+      'Track nested field state, validate snapshots, handle typed business failures, and refresh matching Nuxt queries after successful mutations.',
   },
   {
     icon: 'i-lucide-folder-open',
@@ -120,7 +120,7 @@ const {
       <div class="hero-container">
         <div class="hero-badge">
           <UIcon name="i-lucide-sparkles" class="size-3.5 text-emerald-400" />
-          <span>v{{ version }} &mdash; Standard Schema, typed forms &amp; optimistic updates</span>
+          <span>v{{ version }} &mdash; Advanced forms, typed business errors &amp; query refresh</span>
         </div>
 
         <h1 class="hero-title">

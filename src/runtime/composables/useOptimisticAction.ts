@@ -4,16 +4,16 @@ import type { SafeAction, SafeActionReference } from '../types'
 import { useAction } from './useAction'
 import type { UseActionOptions } from './useAction'
 
-export type UseOptimisticActionOptions<TInput, TOutput, TData, TServerError = string> = UseActionOptions<TInput, TOutput, TServerError> & {
+export type UseOptimisticActionOptions<TInput, TOutput, TData, TServerError = string, TBusinessError = never> = UseActionOptions<TInput, TOutput, TServerError, TBusinessError> & {
   currentData: Ref<TData>
   /** Return a new value; do not mutate currentData in place. */
   updateFn: (input: TInput, current: TData) => TData
 }
 
 /** A newer execution replaces the previous optimistic operation. Output is never assigned to currentData. */
-export function useOptimisticAction<TInput, TOutput, TData, TServerError = string>(
-  action: SafeAction<TInput, TOutput, TServerError> | SafeActionReference<TInput, TOutput, TServerError>,
-  options: UseOptimisticActionOptions<TInput, TOutput, TData, TServerError>,
+export function useOptimisticAction<TInput, TOutput, TData, TServerError = string, TBusinessError = never>(
+  action: SafeAction<TInput, TOutput, TServerError, TBusinessError> | SafeActionReference<TInput, TOutput, TServerError, TBusinessError>,
+  options: UseOptimisticActionOptions<TInput, TOutput, TData, TServerError, TBusinessError>,
 ) {
   let pending: { baseline: TData; optimistic: TData } | undefined
   function rollback() {

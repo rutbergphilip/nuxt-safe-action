@@ -61,7 +61,7 @@ export function generateReferences(actions: ActionFileInfo[], outputDir: string)
   }
   lines.push('')
   for (const action of actions) {
-    lines.push(`export const ${action.exportName}: SafeActionReference<(typeof _action_${action.exportName})['_types']['input'], (typeof _action_${action.exportName})['_types']['output'], (typeof _action_${action.exportName})['_types']['serverError']> = Object.freeze({ __safeActionPath: ${JSON.stringify(action.name)}, __safeActionMethod: ${JSON.stringify(action.method.toUpperCase())} }) as any`)
+    lines.push(`export const ${action.exportName}: SafeActionReference<(typeof _action_${action.exportName})['_types']['input'], (typeof _action_${action.exportName})['_types']['output'], (typeof _action_${action.exportName})['_types']['serverError'], NonNullable<(typeof _action_${action.exportName})['_types']['businessError']>> = Object.freeze({ __safeActionPath: ${JSON.stringify(action.name)}, __safeActionMethod: ${JSON.stringify(action.method.toUpperCase())} }) as any`)
   }
   return lines.join('\n') + '\n'
 }

@@ -37,13 +37,43 @@ export type InferSchemaOutput<TSchema> =
   TSchema extends StandardSchemaV1<unknown, infer TOutput> ? TOutput :
   TSchema extends LegacyActionSchema<unknown, infer TOutput> ? TOutput : never
 
-export interface ActionResult<TOutput, TServerError = string> {
+export interface ActionResult<TOutput, TServerError = string, TBusinessError = never> {
   data?: TOutput
   serverError?: TServerError
+  businessError?: TBusinessError
   validationErrors?: ValidationErrors
 }
 
 export type ValidationErrors = Record<string, string[]>
+
+/** Public, declared business failure. Unexpected exceptions never become codes. */
+export interface BusinessError<TCode extends string = string> {
+  code: TCode
+  message: string
+}
+
+type JoinPath<TKey extends string | number, TPath> = TPath extends string | number ? `${TKey}.${TPath}` : never
+type PathKeys<T> = T extends Date | ((...args: never[]) => unknown) ? never : T extends readonly unknown[] ? number : T extends object ? Extract<keyof T, string | number> : never
+type PathChild<T, K extends string | number> = T extends readonly (infer TItem)[] ? TItem : K extends keyof T ? T[K] : never
+type PathLevelOne<T> = PathKeys<T>
+type PathLevelTwo<T> = { [K in PathKeys<T>]: JoinPath<K, PathLevelOne<PathChild<T, K>>> }[PathKeys<T>]
+type PathLevelThree<T> = { [K in PathKeys<T>]: JoinPath<K, PathLevelTwo<PathChild<T, K>>> }[PathKeys<T>]
+type PathLevelFour<T> = { [K in PathKeys<T>]: JoinPath<K, PathLevelThree<PathChild<T, K>>> }[PathKeys<T>]
+/** Dotted raw-input paths capped at four segments, including array indices. */
+export type FieldPath<T> = 0 extends (1 & T) ? string : `${PathLevelOne<T>}` | PathLevelTwo<T> | PathLevelThree<T> | PathLevelFour<T>
+export type InputPath<T> = FieldPath<T>
+type PathPart<T, TKey extends string> =
+  T extends readonly (infer TItem)[] ? TKey extends `${number}` ? TItem : never :
+  T extends object ? TKey extends keyof T ? T[TKey] : TKey extends `${infer N extends number}` ? N extends keyof T ? T[N] : never : never : never
+export type FieldPathValue<T, TPath extends string> =
+  TPath extends `${infer TKey}.${infer TRest}` ? FieldPathValue<PathPart<T, TKey>, TRest> : PathPart<T, TPath>
+
+/** Typed helper errors; legacy ValidationErrors remains permissive. */
+export type FieldErrors<TInput> = Partial<Record<FieldPath<TInput> | '_root' | '_errors', readonly string[]>>
+export type BusinessErrorFn<TInput, TBusinessError = never> = [TBusinessError] extends [never] ? (code: never) => never : (
+  code: TBusinessError extends BusinessError<infer TCode> ? TCode : never,
+  options?: { validationErrors?: FieldErrors<TInput> },
+) => never
 
 /**
  * A safe action carries phantom types for input/output inference plus
@@ -53,24 +83,28 @@ export type ValidationErrors = Record<string, string[]>
  * `{ __safeActionPath: string }` — the types are applied via a generated
  * declaration file so that `useAction` can infer `TInput` and `TOutput`.
  */
-export interface SafeAction<TInput = unknown, TOutput = unknown, TServerError = string> {
+export interface SafeAction<TInput = unknown, TOutput = unknown, TServerError = string, TBusinessError = never> {
   /** phantom field — carries generic types for inference, never set at runtime */
   readonly _types: {
     input: TInput
     output: TOutput
     serverError: TServerError
+    /** Optional to preserve existing manually constructed phantom types. */
+    businessError?: TBusinessError
   }
 
-  _execute: (rawInput: unknown, event: H3Event) => Promise<ActionResult<TOutput, TServerError>>
+  _execute: (rawInput: unknown, event: H3Event) => Promise<ActionResult<TOutput, TServerError, TBusinessError>>
 }
 
-export interface SafeActionReference<TInput = unknown, TOutput = unknown, TServerError = string> {
+export interface SafeActionReference<TInput = unknown, TOutput = unknown, TServerError = string, TBusinessError = never> {
   readonly __safeActionPath: string
   /** phantom field — carries generic types for inference, never set at runtime */
   readonly _types: {
     input: TInput
     output: TOutput
     serverError: TServerError
+    /** Optional to preserve existing manually constructed phantom types. */
+    businessError?: TBusinessError
   }
 }
 
@@ -90,14 +124,15 @@ export type MiddlewareFn<TCtxIn = Record<string, unknown>, TCtxOut = TCtxIn> = (
   args: MiddlewareArgs<TCtxIn>,
 ) => Promise<MiddlewareResult<TCtxOut>>
 
-export interface ActionHandlerArgs<TCtx, TInput> {
+export interface ActionHandlerArgs<TCtx, TInput, TBusinessError = never, TErrorInput = TInput> {
   parsedInput: TInput
+  fail?: BusinessErrorFn<TErrorInput, TBusinessError>
   ctx: TCtx
   event: H3Event
 }
 
-export type ActionHandler<TCtx, TInput, TOutput> = (
-  args: ActionHandlerArgs<TCtx, TInput>,
+export type ActionHandler<TCtx, TInput, TOutput, TBusinessError = never, TErrorInput = TInput> = (
+  args: ActionHandlerArgs<TCtx, TInput, TBusinessError, TErrorInput> & ([TBusinessError] extends [never] ? unknown : { fail: BusinessErrorFn<TErrorInput, TBusinessError> }),
 ) => Promise<TOutput> | TOutput
 
 export type ActionMetadata = Record<string, unknown>
@@ -112,7 +147,8 @@ export interface ActionConfig<TServerError = string> {
   inputSchema?: ActionSchema
   outputSchema?: ActionSchema
   metadata: ActionMetadata
-  handler: ActionHandler<any, any, any>
+  businessErrors?: Readonly<Record<string, string>>
+  handler: ActionHandler<any, any, any, any>
   handleServerError?: (error: Error) => TServerError
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -121,23 +157,29 @@ export type ActionStatus = 'idle' | 'executing' | 'hasSucceeded' | 'hasErrored'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type InferSafeActionInput<T> =
-  T extends SafeAction<infer I, any, any> ? I :
-  T extends SafeActionReference<infer I, any, any> ? I : never
+  T extends SafeAction<infer I, any, any, any> ? I :
+  T extends SafeActionReference<infer I, any, any, any> ? I : never
 
 export type InferSafeActionOutput<T> =
-  T extends SafeAction<any, infer O, any> ? O :
-  T extends SafeActionReference<any, infer O, any> ? O : never
+  T extends SafeAction<any, infer O, any, any> ? O :
+  T extends SafeActionReference<any, infer O, any, any> ? O : never
 
 export type InferSafeActionServerError<T> =
-  T extends SafeAction<any, any, infer E> ? E :
-  T extends SafeActionReference<any, any, infer E> ? E : string
+  T extends SafeAction<any, any, infer E, any> ? E :
+  T extends SafeActionReference<any, any, infer E, any> ? E : string
+export type InferSafeActionBusinessError<T> =
+  T extends SafeAction<any, any, any, infer E> ? E :
+  T extends SafeActionReference<any, any, any, infer E> ? E : never
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-export interface UseActionReturn<TInput, TOutput, TServerError = string> {
+export interface UseActionReturn<TInput, TOutput, TServerError = string, TBusinessError = never> {
   execute: (input: TInput) => void
-  executeAsync: (input: TInput) => Promise<ActionResult<TOutput, TServerError>>
+  executeAsync: (input: TInput) => Promise<ActionResult<TOutput, TServerError, TBusinessError>>
   data: Readonly<import('vue').Ref<TOutput | undefined>>
   serverError: Readonly<import('vue').Ref<TServerError | undefined>>
+  businessError: Readonly<import('vue').Ref<TBusinessError | undefined>>
+  isRefreshing: Readonly<import('vue').Ref<boolean>>
+  refreshError: Readonly<import('vue').Ref<Error | null>>
   validationErrors: Readonly<import('vue').Ref<ValidationErrors | undefined>>
   status: Readonly<import('vue').Ref<ActionStatus>>
   isIdle: import('vue').ComputedRef<boolean>
@@ -147,13 +189,13 @@ export interface UseActionReturn<TInput, TOutput, TServerError = string> {
   reset: () => void
 }
 
-export interface UseActionCallbacks<TInput, TOutput, TServerError = string> {
+export interface UseActionCallbacks<TInput, TOutput, TServerError = string, TBusinessError = never> {
   onSuccess?: (args: { data: TOutput; input: TInput }) => void
   onError?: (args: {
-    error: { serverError?: TServerError; validationErrors?: ValidationErrors }
+    error: { serverError?: TServerError; businessError?: TBusinessError; validationErrors?: ValidationErrors }
     input: TInput
   }) => void
-  onSettled?: (args: { result: ActionResult<TOutput, TServerError>; input: TInput }) => void
+  onSettled?: (args: { result: ActionResult<TOutput, TServerError, TBusinessError>; input: TInput }) => void
   onExecute?: (args: { input: TInput }) => void
 
   /**

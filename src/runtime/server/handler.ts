@@ -3,7 +3,7 @@ import type { SafeAction } from '../types'
 
 /** Shared generated route handler. Malformed JSON requests never execute the action. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function createActionHandler(action: SafeAction<any, any, any>, method?: string) {
+export function createActionHandler(action: SafeAction<any, any, any, any>, method?: string) {
   return defineEventHandler(async (event) => {
     let input: unknown
     try {

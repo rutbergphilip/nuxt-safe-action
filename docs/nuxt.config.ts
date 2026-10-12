@@ -22,6 +22,9 @@ export default defineNuxtConfig({
     url: 'https://nuxt-safe-action.vercel.app',
   },
 
+  // Docs run on Node 24: avoid native addon cleanup crashes in better-sqlite3.
+  content: { experimental: { sqliteConnector: 'native' } },
+
   runtimeConfig: {
     public: {
       version,

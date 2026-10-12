@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.7.0
+
+### Features
+
+- Declare typed public business errors with `.errors()` and handler `fail()`, including optional typed field errors.
+- Add nested field helpers, dirty/touched tracking, optional client validation, and `toFormErrors()` to form workflows.
+- Refresh explicitly selected Nuxt data keys or registered tags after successful mutations, with separate refresh state/errors.
+- Expand runnable profile examples and installed-package verification for business envelopes, query integration, and advanced forms.
+
+### Compatibility
+
+- Existing builder methods, `ActionError`, server error mapping, result fields, and basic form bindings continue to work.
+- Nuxt owns query caching and hydration; validation libraries and UI components remain optional application choices.
+
 ## v0.6.0
 
 ### Features

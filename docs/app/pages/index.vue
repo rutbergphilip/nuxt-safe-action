@@ -11,14 +11,14 @@ useSeoMeta({
     'Type-safe server actions for Nuxt. Validate action contracts with Standard Schema, compose typed middleware, and build predictable forms and mutations.',
   ogTitle: 'nuxt-safe-action - Type-safe Server Actions for Nuxt',
   ogDescription:
-    'Use Zod, Valibot, or ArkType with typed middleware, nested form errors, cancellation, and optimistic updates for Nuxt.',
+    'Use Zod, Valibot, ArkType, or Yup with typed middleware, nested form errors, cancellation, and optimistic updates for Nuxt.',
   ogType: 'website',
   ogUrl: 'https://nuxt-safe-action.vercel.app',
   ogImage: '/social-card.png',
   twitterCard: 'summary_large_image',
   twitterTitle: 'nuxt-safe-action - Type-safe Server Actions for Nuxt',
   twitterDescription:
-    'Use Zod, Valibot, or ArkType with typed middleware, nested form errors, cancellation, and optimistic updates for Nuxt.',
+    'Use Zod, Valibot, ArkType, or Yup with typed middleware, nested form errors, cancellation, and optimistic updates for Nuxt.',
   twitterImage: 'https://nuxt-safe-action.vercel.app/social-card.png',
 })
 
@@ -41,7 +41,7 @@ const features = [
     icon: 'i-lucide-check-circle',
     title: 'Standard Schema Validation',
     description:
-      'Use Zod, Valibot, ArkType, or another Standard Schema validator. Input and output transforms stay inferred.',
+      'Use Zod, Valibot, ArkType, Yup, or another Standard Schema validator. Input and parsed-output types follow the declared schema contracts.',
   },
   {
     icon: 'i-lucide-layers',

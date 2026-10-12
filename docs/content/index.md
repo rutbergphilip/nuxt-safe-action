@@ -10,7 +10,7 @@ layout: page
 Type-safe Server Actions for [Nuxt]{style="color: var(--color-primary-500)"}
 
 #description
-Validate contracts with Zod, Valibot, ArkType, or Standard Schema. Build forms and mutations with typed middleware, predictable errors, cancellation, and optimistic updates.
+Validate contracts with Zod, Valibot, ArkType, Yup, or Standard Schema. Build forms and mutations with typed middleware, predictable errors, cancellation, and optimistic updates.
 
 #links
   :::u-button

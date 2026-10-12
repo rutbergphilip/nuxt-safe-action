@@ -32,7 +32,8 @@
     "standard-schema",
     "valibot",
     "arktype",
-    "optimistic-updates"
+    "optimistic-updates",
+    "yup"
   ],
   "author": "Philip Rutberg",
   "license": "MIT",
@@ -98,6 +99,8 @@
     "vitest": "^4.0.18",
     "vue": "^3.5.28",
     "vue-tsc": "^3.2.4",
+    "yup": "^1.7.1",
+    "yup-min": "npm:yup@1.7.0",
     "zod": "^3.24.0",
     "zod3": "npm:zod@3.20.6",
     "zod4": "npm:zod@^4.3.6"

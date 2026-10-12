@@ -10,7 +10,7 @@
 
 Type-safe server actions for Nuxt, with validated contracts and predictable form errors.
 
-Define actions in `server/actions/`, compose typed middleware, and import generated references into Vue components. Use Zod, Valibot, ArkType, or another Standard Schema v1 validator. Existing Zod 3 and 4 actions keep working.
+Define actions in `server/actions/`, compose typed middleware, and import generated references into Vue components. Use Zod, Valibot, ArkType, Yup, or another Standard Schema v1 validator. Yup requires version 1.7 or newer. Existing Zod 3 and 4 actions keep working.
 
 [Documentation](https://nuxt-safe-action.vercel.app) · [Runnable example](./example) · [StackBlitz](https://stackblitz.com/github/rutbergphilip/nuxt-safe-action/tree/main/example) · [Changelog](./CHANGELOG.md)
 
@@ -19,6 +19,7 @@ Define actions in `server/actions/`, compose typed middleware, and import genera
 ```bash
 npx nuxi module add nuxt-safe-action
 pnpm add zod
+# Alternatives: pnpm add valibot, pnpm add arktype, or pnpm add yup@^1.7.0
 ```
 
 Or install manually:
@@ -166,7 +167,7 @@ pnpm dev
 pnpm verify
 ```
 
-The verification command runs lint, types, tests, build, packed-install smoke validation, and documentation build. CI covers Nuxt 3/4 with Zod 3/4; validator tests also cover Valibot and ArkType. See [contributing](./CONTRIBUTING.md) and [security reporting](./SECURITY.md).
+The verification command runs lint, types, tests, build, packed-install smoke validation, and documentation build. CI covers Nuxt 3/4 with Zod 3/4; validator tests also cover Valibot, ArkType, and Yup. See [contributing](./CONTRIBUTING.md) and [security reporting](./SECURITY.md).
 
 ## Inspiration and license
 

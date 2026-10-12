@@ -6,73 +6,22 @@
 
 [![npm version](https://img.shields.io/npm/v/nuxt-safe-action/latest.svg?style=flat&colorA=020420&colorB=00DC82)](https://npmjs.com/package/nuxt-safe-action)
 [![npm downloads](https://img.shields.io/npm/dm/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82)](https://npm.chart.dev/nuxt-safe-action)
-[![License](https://img.shields.io/npm/l/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82)](https://npmjs.com/package/nuxt-safe-action)
-[![Nuxt](https://img.shields.io/badge/Nuxt-020420?logo=nuxt)](https://nuxt.com)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/npm/l/nuxt-safe-action.svg?style=flat&colorA=020420&colorB=00DC82)](./LICENSE)
 
-Type-safe server actions for Nuxt.
+Type-safe server actions for Nuxt, with validated contracts and predictable form errors.
 
-Define actions on the server with Zod validation and middleware, and call them from the client with full type inference, reactive status tracking, and field-level validation errors.
+Define actions in `server/actions/`, compose typed middleware, and import generated references into Vue components. Use Zod, Valibot, ArkType, or another Standard Schema v1 validator. Existing Zod 3 and 4 actions keep working.
 
-```ts
-// server/actions/create-post.ts
-import { z } from 'zod'
-import { actionClient } from '../utils/action-client'
+[Documentation](https://nuxt-safe-action.vercel.app) · [Runnable example](./example) · [StackBlitz](https://stackblitz.com/github/rutbergphilip/nuxt-safe-action/tree/main/example) · [Changelog](./CHANGELOG.md)
 
-export default actionClient
-  .schema(z.object({
-    title: z.string().min(1).max(200),
-    body: z.string().min(1),
-  }))
-  .action(async ({ parsedInput }) => {
-    const post = await db.post.create({ data: parsedInput })
-    return { id: post.id, title: post.title }
-  })
-```
-
-```vue
-<script setup lang="ts">
-import { createPost } from '#safe-action/actions'
-
-const { execute, data, status, validationErrors } = useAction(createPost)
-</script>
-```
-
-## Features
-
-- **End-to-end type safety** - Input and output types flow from server to client automatically
-- **Input validation** - Zod schemas validate input before your handler runs
-- **Composable middleware** - Chain auth checks, logging, and more with typed context
-- **Reactive composable** - `useAction` gives you `status`, `data`, `validationErrors`, and callbacks
-- **Auto route generation** - Drop files in `server/actions/` and routes are created for you
-- **H3Event access** - Full request context available in middleware and handlers
-- **Nuxt-native** - Auto-imports, familiar conventions, works out of the box
-
-## Why nuxt-safe-action?
-
-Nuxt already provides `useFetch`/`$fetch` with typed responses and file-based server routes. But input types, validation, and error handling are still left to you in every route handler. `nuxt-safe-action` adds a declarative builder that validates input with Zod, chains per-action middleware for auth and logging, and returns field-level validation errors to the client. It works with Nuxt 3 and Nuxt 4, supports both Zod v3 and v4, and adds minimal bundle overhead.
-
-### Comparison
-
-| | `$fetch` / `useFetch` | tRPC-nuxt | **nuxt-safe-action** |
-|---|---|---|---|
-| End-to-end type safety | output only | full | full |
-| Input validation | manual per route | via zod | built-in zod |
-| Per-action middleware | no | yes | composable chain |
-| Field-level validation errors | no | no | built-in |
-| File-based routing | `server/api/` | procedure-based | `server/actions/` |
-| Reactive composable | `useFetch` | `useQuery` | `useAction` |
-| Bundle overhead | none | heavy | minimal |
-
-## Quick Setup
-
-Install the module:
+## Quick setup
 
 ```bash
 npx nuxi module add nuxt-safe-action
+pnpm add zod
 ```
 
-Or manually:
+Or install manually:
 
 ```bash
 pnpm add nuxt-safe-action zod
@@ -80,211 +29,145 @@ pnpm add nuxt-safe-action zod
 
 ```ts
 // nuxt.config.ts
-export default defineNuxtConfig({
-  modules: ['nuxt-safe-action'],
-})
+export default defineNuxtConfig({ modules: ['nuxt-safe-action'] })
 ```
 
-## Usage
-
-### 1. Create an action client
+The module requires a Nuxt server deployment for actions. A static-only export cannot execute them. Nuxt 3 and 4 are supported; use the Node version required by your Nuxt release.
 
 ```ts
 // server/utils/action-client.ts
 import { createSafeActionClient } from '#safe-action'
 
 export const actionClient = createSafeActionClient({
-  handleServerError: (error) => {
-    console.error('Action error:', error.message)
-    return error.message
+  handleServerError(error) {
+    console.error('Action failed:', error)
+    return 'Something went wrong. Please try again.'
   },
 })
-
-// You can also create an authenticated client by adding middleware
-export const authActionClient = actionClient
-  .use(async ({ next, event }) => {
-    const session = await getUserSession(event)
-    if (!session) throw new Error('Unauthorized')
-    return next({ ctx: { userId: session.user.id } })
-  })
 ```
 
-### 2. Define actions
-
-Create files in `server/actions/`. Each file should default-export an action:
-
 ```ts
-// server/actions/greet.ts
+// server/actions/create-post.ts
 import { z } from 'zod'
 import { actionClient } from '../utils/action-client'
 
 export default actionClient
-  .schema(z.object({
-    name: z.string().min(1, 'Name is required'),
+  .schema(z.object({ title: z.string().trim().min(1).max(200) }))
+  .outputSchema(z.object({ id: z.string(), title: z.string() }))
+  .action(({ parsedInput }) => ({
+    id: crypto.randomUUID(),
+    title: parsedInput.title,
   }))
-  .action(async ({ parsedInput }) => {
-    return { greeting: `Hello, ${parsedInput.name}!` }
-  })
+// Demonstration response; connect your own persistence in the handler.
 ```
-
-### 3. Use in components
 
 ```vue
 <script setup lang="ts">
-import { greet } from '#safe-action/actions'
+import { createPost } from '#safe-action/actions'
 
-const { execute, data, isExecuting, hasSucceeded, validationErrors } = useAction(greet, {
-  onSuccess({ data }) {
-    console.log(data.greeting) // fully typed!
-  },
-  onError({ error }) {
-    console.error(error)
-  },
-})
+const { values, submit, data, fieldErrors, rootErrors, serverError, isExecuting } =
+  useFormAction(createPost, { initialValues: { title: '' } })
 </script>
 
 <template>
-  <form @submit.prevent="execute({ name: 'World' })">
-    <button :disabled="isExecuting">
-      {{ isExecuting ? 'Loading...' : 'Greet' }}
-    </button>
-    <p v-if="hasSucceeded">{{ data?.greeting }}</p>
+  <form @submit.prevent="submit()">
+    <label for="title">Title</label>
+    <input id="title" v-model="values.title" :aria-invalid="Boolean(fieldErrors.title)" />
+    <p v-for="message in fieldErrors.title" :key="message">{{ message }}</p>
+    <p v-for="message in rootErrors" :key="message" role="alert">{{ message }}</p>
+    <p v-if="serverError" role="alert">{{ serverError }}</p>
+    <button :disabled="isExecuting">{{ isExecuting ? 'Creating…' : 'Create' }}</button>
+    <p v-if="data">Created: {{ data.title }}</p>
   </form>
 </template>
 ```
 
-## API
+## Features
 
-### `createSafeActionClient(opts?)`
+- Input and output inference through generated client references, including schema transforms.
+- Standard Schema v1 validation, asynchronous refinements, and legacy Zod 3.20+ parsing.
+- Immutable builder chains, metadata, H3 request access, and typed middleware context.
+- Nested field errors, root errors, intentional `ActionError` messages, and generic unexpected failures.
+- `useAction` with latest-execution state ownership, cancellation, timeouts, headers, and callbacks.
+- `useFormAction` with typed values, submission snapshots, and reset.
+- `useOptimisticAction` with guarded rollback and application-controlled reconciliation.
+- POST by default, GET/POST/PUT/PATCH/DELETE filename suffixes, nested directories, and development route regeneration.
 
-Creates a new action client. Call this once and reuse it across actions.
+## Choose the right abstraction
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `handleServerError` | `(error: Error) => string` | Transform server errors before sending to client |
+| Approach | Integration | Good fit |
+|---|---|---|
+| Nuxt `$fetch` / `useFetch` | Ordinary Nitro routes; choose your validation/error contract | Direct HTTP APIs or existing endpoints |
+| `nuxt-safe-action` | Dedicated action directory, typed builder, consistent result envelope | Validated forms and mutations with explicit middleware |
+| [`nuxt-actions`](https://billymaulana.github.io/nuxt-actions/) | Broader action toolkit with query/cache, streaming, uploads, OpenAPI, and other tooling | Applications wanting those built-in abstractions |
 
-### Builder chain
+Both action libraries offer schema validation, typed middleware, output validation, and optimistic updates. This module concentrates on the form and mutation path and composes with Nuxt's existing query tools. No speed, bundle-size, or security superiority is implied. See the [comparison guide](https://nuxt-safe-action.vercel.app/guide/comparison).
 
-| Method | Description |
-|--------|-------------|
-| `.schema(zodSchema)` | Set input validation schema |
-| `.outputSchema(zodSchema)` | Set output validation schema |
-| `.use(middleware)` | Add middleware to the chain |
-| `.metadata(meta)` | Attach metadata (accessible in middleware) |
-| `.action(handler)` | Define the action handler (terminal) |
-
-### `useAction(action, callbacks?)`
-
-Vue composable for executing actions.
-
-**Returns:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `execute(input)` | `(input: TInput) => void` | Fire-and-forget execution |
-| `executeAsync(input)` | `(input: TInput) => Promise<ActionResult>` | Awaitable execution |
-| `data` | `Ref<TOutput \| undefined>` | Success data |
-| `serverError` | `Ref<string \| undefined>` | Server error message |
-| `validationErrors` | `Ref<Record<string, string[]> \| undefined>` | Per-field validation errors |
-| `status` | `Ref<ActionStatus>` | `'idle' \| 'executing' \| 'hasSucceeded' \| 'hasErrored'` |
-| `isIdle` | `ComputedRef<boolean>` | Status shortcut |
-| `isExecuting` | `ComputedRef<boolean>` | Status shortcut |
-| `hasSucceeded` | `ComputedRef<boolean>` | Status shortcut |
-| `hasErrored` | `ComputedRef<boolean>` | Status shortcut |
-| `reset()` | `() => void` | Reset all state to initial |
-
-**Callbacks:**
-
-| Callback | Description |
-|----------|-------------|
-| `onSuccess({ data, input })` | Called when the action succeeds |
-| `onError({ error, input })` | Called on server or validation error |
-| `onSettled({ result, input })` | Called after every execution |
-| `onExecute({ input })` | Called when execution starts |
-
-### Middleware
+## API essentials
 
 ```ts
-actionClient.use(async ({ ctx, next, event, metadata, clientInput }) => {
-  // ctx: context from previous middleware
-  // event: H3Event with full request access
-  // metadata: action metadata
-  // clientInput: raw input before validation
-  return next({ ctx: { ...ctx, myData: 'value' } })
+const action = createSafeActionClient()
+  .use(async ({ ctx, next }) => next({ ctx: { ...ctx, requestLabel: 'example' } }))
+  .metadata({ name: 'greet' })
+  .schema(z.object({ name: z.string() }))
+  .outputSchema(z.object({ greeting: z.string() }))
+  .action(({ parsedInput, ctx, event }) => ({ greeting: `Hello, ${parsedInput.name}` }))
+```
+
+`next({ ctx })` replaces the previous context. Spread `...ctx` to preserve earlier fields. Call `next()` exactly once on the successful path; throw to reject the request. Middleware receives raw input; schema validation happens before the handler.
+
+| Client method | Behavior |
+|---|---|
+| `execute(input)` | Starts execution; returns `void` |
+| `executeAsync(input)` | Resolves `{ data?, serverError?, validationErrors? }`; does not unwrap data |
+| `cancel()` | Invalidates pending updates, aborts owned requests, returns status to idle |
+| `reset()` | Cancels pending execution and clears result state |
+
+Only the latest execution updates reactive state and runs completion callbacks. Every execution promise still resolves its own result. Callback exceptions are logged and do not turn a successful result into a failure. Cancellation cannot undo a mutation that already reached the server. Automatic transport retries are disabled.
+
+```ts
+const { executeAsync, cancel } = useAction(createPost, {
+  timeout: 10_000,
+  cancelPrevious: true,
+  abortOnDispose: true, // opt-in; false by default
+  headers: () => ({ 'X-Request-Source': 'editor' }),
+  credentials: 'same-origin',
+  onSuccess({ data, input }) { console.log(data.id) },
+  onError({ error, input }) { console.error(error) },
+  onSettled({ result, input }) { /* latest completion only */ },
 })
 ```
 
-Middleware must always call `next()`. If it doesn't, the action will throw an error.
+`detached: true` selects native browser `fetch`. Both transports can continue across SPA navigation unless explicitly cancelled; neither guarantees completion across page unload. [Full client reference](https://nuxt-safe-action.vercel.app/api/use-action).
 
-### Error handling
+## Recipes
 
-```ts
-import { ActionError, returnValidationErrors } from '#safe-action'
-
-// Throw a server error
-throw new ActionError('Not enough credits')
-
-// Return per-field validation errors
-returnValidationErrors({
-  email: ['This email is already taken'],
-})
-```
+- [HTML forms and Nuxt UI nested field errors](https://nuxt-safe-action.vercel.app/guide/forms)
+- [Authentication, ownership, and output allowlists](https://nuxt-safe-action.vercel.app/guide/authentication)
+- [Optimistic updates and rollback](https://nuxt-safe-action.vercel.app/guide/optimistic-updates)
+- [GET actions with Nuxt `useAsyncData`](https://nuxt-safe-action.vercel.app/guide/queries)
+- [Validator choice, transforms, and async refinements](https://nuxt-safe-action.vercel.app/guide/validation)
 
 ## Configuration
 
 ```ts
-// nuxt.config.ts
 export default defineNuxtConfig({
   modules: ['nuxt-safe-action'],
-  safeAction: {
-    actionsDir: 'actions', // relative to server/ directory (default: 'actions')
-  },
+  safeAction: { actionsDir: 'actions' }, // relative to serverDir
 })
 ```
 
-## How it works
+## Development
 
-1. You define actions in `server/actions/` using the builder chain
-2. The module scans that directory and generates Nitro API routes at `/api/_actions/<name>`
-3. A typed virtual module (`#safe-action/actions`) provides client-side references with full type inference
-4. `useAction()` calls the generated route via `$fetch` and returns reactive state
+```bash
+pnpm install
+pnpm dev:prepare
+pnpm dev
+pnpm verify
+```
 
-## Inspiration
+The verification command runs lint, types, tests, build, packed-install smoke validation, and documentation build. CI covers Nuxt 3/4 with Zod 3/4; validator tests also cover Valibot and ArkType. See [contributing](./CONTRIBUTING.md) and [security reporting](./SECURITY.md).
 
-Inspired by [next-safe-action](https://github.com/TheEdoRan/next-safe-action), adapted for the Nuxt ecosystem.
+## Inspiration and license
 
-## Contributing
-
-<details>
-  <summary>Local development</summary>
-
-  ```bash
-  # Install dependencies
-  pnpm install
-
-  # Generate type stubs
-  pnpm run dev:prepare
-
-  # Develop with the playground
-  pnpm run dev
-
-  # Build the playground
-  pnpm run dev:build
-
-  # Run ESLint
-  pnpm run lint
-
-  # Run Vitest
-  pnpm run test
-  pnpm run test:watch
-
-  # Type check
-  pnpm run test:types
-  ```
-
-</details>
-
-## License
-
-[MIT](./LICENSE)
-
+Inspired by [next-safe-action](https://github.com/TheEdoRan/next-safe-action), adapted for Nuxt. [MIT](./LICENSE).

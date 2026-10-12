@@ -8,17 +8,17 @@ definePageMeta({
 useSeoMeta({
   title: 'nuxt-safe-action',
   description:
-    'Type-safe server actions for Nuxt. Define actions with Zod validation and middleware, call them from the client with full type inference.',
+    'Type-safe server actions for Nuxt. Validate action contracts with Standard Schema, compose typed middleware, and build predictable forms and mutations.',
   ogTitle: 'nuxt-safe-action - Type-safe Server Actions for Nuxt',
   ogDescription:
-    'Define server actions with Zod validation and composable middleware. Call them from Vue components with full type inference, reactive status tracking, and field-level validation errors.',
+    'Use Zod, Valibot, or ArkType with typed middleware, nested form errors, cancellation, and optimistic updates for Nuxt.',
   ogType: 'website',
   ogUrl: 'https://nuxt-safe-action.vercel.app',
   ogImage: '/social-card.png',
   twitterCard: 'summary_large_image',
   twitterTitle: 'nuxt-safe-action - Type-safe Server Actions for Nuxt',
   twitterDescription:
-    'Define server actions with Zod validation and composable middleware. Call them from Vue components with full type inference, reactive status tracking, and field-level validation errors.',
+    'Use Zod, Valibot, or ArkType with typed middleware, nested form errors, cancellation, and optimistic updates for Nuxt.',
   twitterImage: 'https://nuxt-safe-action.vercel.app/social-card.png',
 })
 
@@ -39,9 +39,9 @@ const features = [
   },
   {
     icon: 'i-lucide-check-circle',
-    title: 'Input Validation',
+    title: 'Standard Schema Validation',
     description:
-      'Zod schemas validate input before your handler runs. Validation errors are returned per-field.',
+      'Use Zod, Valibot, ArkType, or another Standard Schema validator. Input and output transforms stay inferred.',
   },
   {
     icon: 'i-lucide-layers',
@@ -51,9 +51,9 @@ const features = [
   },
   {
     icon: 'i-lucide-activity',
-    title: 'Reactive Composable',
+    title: 'Typed Forms & Optimistic Updates',
     description:
-      'useAction gives you status, data, validationErrors, and lifecycle callbacks out of the box.',
+      'Submit snapshots of typed form values, display nested errors, and apply optimistic changes with guarded rollback.',
   },
   {
     icon: 'i-lucide-folder-open',
@@ -63,9 +63,9 @@ const features = [
   },
   {
     icon: 'i-lucide-server',
-    title: 'H3Event Access',
+    title: 'Explicit Request Lifecycle',
     description:
-      'Full request context available in middleware and handlers. Read cookies, headers, sessions.',
+      'Latest execution owns state. Configure cancellation, timeouts, headers, and optional scope disposal explicitly.',
   },
 ]
 
@@ -74,34 +74,34 @@ import { actionClient } from '../utils/action-client'
 
 export default actionClient
   .schema(z.object({
-    title: z.string().min(1).max(200),
-    body: z.string().min(1),
+    title: z.string().trim().min(1).max(200),
   }))
-  .action(async ({ parsedInput }) => {
-    const post = await db.post.create({
-      data: parsedInput,
-    })
-    return { id: post.id, title: post.title }
-  })`
+  .outputSchema(z.object({
+    id: z.string(), title: z.string(),
+  }))
+  .action(({ parsedInput }) => ({
+    id: crypto.randomUUID(),
+    title: parsedInput.title,
+  }))
+// Demo response; connect your persistence.`
 
 const clientCode = `<script setup lang="ts">
 import { createPost } from '#safe-action/actions'
 
-const { execute, data, isExecuting } = useAction(
-  createPost,
-  {
-    onSuccess({ data }) {
-      console.log('Created:', data.title)
-    },
-  }
-)
+const { values, submit, data, fieldErrors, isExecuting } =
+  useFormAction(createPost, {
+    initialValues: { title: '' },
+  })
 ${'<'}/script>
 
 <template>
-  <form @submit.prevent="execute(formData)">
-    <button :disabled="isExecuting">
-      {{ isExecuting ? 'Creating...' : 'Create' }}
-    </button>
+  <form @submit.prevent="submit()">
+    <input v-model="values.title" aria-label="Title" />
+    <p v-for="message in fieldErrors.title" :key="message">
+      {{ message }}
+    </p>
+    <button :disabled="isExecuting">Create</button>
+    <p v-if="data">Created: {{ data.title }}</p>
   </form>
 </template>`
 
@@ -120,7 +120,7 @@ const {
       <div class="hero-container">
         <div class="hero-badge">
           <UIcon name="i-lucide-sparkles" class="size-3.5 text-emerald-400" />
-          <span>v{{ version }} &mdash; Now with detached mode for navigation-safe fetches</span>
+          <span>v{{ version }} &mdash; Standard Schema, typed forms &amp; optimistic updates</span>
         </div>
 
         <h1 class="hero-title">
@@ -130,8 +130,8 @@ const {
         </h1>
 
         <p class="hero-description">
-          Define actions on the server with Zod validation and middleware. Call them from the client
-          with full type inference, reactive status tracking, and field-level validation errors.
+          Validate contracts on the server with your preferred schema library. Build forms and mutations
+          with typed middleware, predictable field errors, cancellation, and optimistic updates.
         </p>
 
         <div class="hero-actions">
@@ -241,7 +241,7 @@ const {
       <div class="features-container">
         <h2 class="section-label">Features</h2>
         <p class="section-sublabel">
-          Everything you need for safe, validated server-client communication.
+          Validated contracts, predictable forms, and explicit request behavior.
         </p>
 
         <div class="features-grid">

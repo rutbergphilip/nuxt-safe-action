@@ -354,7 +354,7 @@ describe('nuxt-safe-action', async () => {
         ).toBe(true)
       }
 
-      const methodRoutes: { route: string; method: string; body?: Record<string, unknown>; query?: string }[] = [
+      const methodRoutes: { route: string; method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; body?: Record<string, unknown>; query?: string }[] = [
         { route: '/api/_actions/get-user', method: 'GET', query: `input=${encodeURIComponent(JSON.stringify({ id: '1' }))}` },
         { route: '/api/_actions/update-user', method: 'PUT', body: { id: '1', name: 'x' } },
         { route: '/api/_actions/remove-item', method: 'DELETE', body: { id: '1' } },
@@ -373,6 +373,17 @@ describe('nuxt-safe-action', async () => {
           || result.serverError !== undefined,
         ).toBe(true)
       }
+    })
+  })
+
+  describe('robust generated routes', () => {
+    it('supports explicit post filenames and same-path method variants', async () => {
+      expect(await $fetch('/api/_actions/explicit', { method: 'POST' })).toEqual({ data: { ok: true } })
+      expect(await $fetch('/api/_actions/variant', { method: 'POST' })).toEqual({ data: { ok: true } })
+      expect(await $fetch('/api/_actions/variant', { method: 'GET' })).toEqual({ data: { ok: true } })
+    })
+    it('returns validation errors for malformed GET JSON without executing', async () => {
+      expect(await $fetch('/api/_actions/get-user?input=%7B')).toEqual({ validationErrors: { _errors: ['Invalid action input'] } })
     })
   })
 

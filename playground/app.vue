@@ -1,6 +1,9 @@
 <template>
   <div style="max-width: 640px; margin: 2rem auto; font-family: system-ui, sans-serif">
     <h1>nuxt-safe-action playground</h1>
+    <p>Demonstration data only; posts and profiles are not persisted.</p>
+    <ProfileForm />
+    <OptimisticTasks />
 
     <!-- Greet Action -->
     <section style="margin-top: 2rem">
@@ -127,6 +130,8 @@
 </template>
 
 <script setup lang="ts">
+import ProfileForm from './components/ProfileForm.vue'
+import OptimisticTasks from './components/OptimisticTasks.vue'
 import { greet, getUser, createPost } from '#safe-action/actions'
 
 const greetName = ref('')

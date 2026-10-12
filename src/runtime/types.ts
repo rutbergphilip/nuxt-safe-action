@@ -1,5 +1,41 @@
 import type { H3Event } from 'h3'
-import type { ZodType } from 'zod'
+
+/** Structural Standard Schema v1 support; no validator runtime dependency. */
+export interface StandardSchemaV1<TInput = unknown, TOutput = TInput> {
+  readonly '~standard': {
+    readonly version: 1
+    readonly vendor: string
+    readonly types?: { readonly input: TInput; readonly output: TOutput }
+    readonly validate: (input: unknown) => SchemaResult<TOutput> | Promise<SchemaResult<TOutput>>
+  }
+}
+
+export interface SchemaIssue {
+  readonly message: string
+  readonly path?: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }>
+}
+
+export type SchemaResult<TOutput> =
+  | { readonly value: TOutput; readonly issues?: undefined }
+  | { readonly issues: ReadonlyArray<SchemaIssue> }
+
+/** Zod before Standard Schema support, including Zod 3.20. */
+export interface LegacyActionSchema<TInput = unknown, TOutput = unknown> {
+  readonly _input: TInput
+  readonly _output: TOutput
+  safeParseAsync: (input: unknown) => Promise<
+    | { success: true; data: TOutput }
+    | { success: false; error: { issues: ReadonlyArray<SchemaIssue> } }
+  >
+}
+
+export type ActionSchema = StandardSchemaV1 | LegacyActionSchema
+export type InferSchemaInput<TSchema> =
+  TSchema extends StandardSchemaV1<infer TInput, unknown> ? TInput :
+  TSchema extends LegacyActionSchema<infer TInput, unknown> ? TInput : never
+export type InferSchemaOutput<TSchema> =
+  TSchema extends StandardSchemaV1<unknown, infer TOutput> ? TOutput :
+  TSchema extends LegacyActionSchema<unknown, infer TOutput> ? TOutput : never
 
 export interface ActionResult<TOutput, TServerError = string> {
   data?: TOutput
@@ -73,8 +109,8 @@ export interface SafeActionClientOpts<TServerError = string> {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface ActionConfig<TServerError = string> {
   middlewares: MiddlewareFn<any, any>[]
-  inputSchema?: ZodType
-  outputSchema?: ZodType
+  inputSchema?: ActionSchema
+  outputSchema?: ActionSchema
   metadata: ActionMetadata
   handler: ActionHandler<any, any, any>
   handleServerError?: (error: Error) => TServerError
@@ -121,16 +157,9 @@ export interface UseActionCallbacks<TInput, TOutput, TServerError = string> {
   onExecute?: (args: { input: TInput }) => void
 
   /**
-   * Use raw `fetch()` instead of `$fetch` for `executeAsync`.
-   *
-   * When `true`, the request survives SPA navigation — the browser completes
-   * the request even after the initiating component is destroyed. Nuxt's `$fetch`
-   * (ofetch) is tied to the component lifecycle and gets aborted on navigation,
-   * producing DOMException / NetworkError.
-   *
-   * The response is still parsed into the standard `ActionResult` shape and all
-   * reactive refs (`data`, `serverError`, `status`) and callbacks (`onSuccess`,
-   * `onError`, `onSettled`) are updated normally.
+   * Use native fetch instead of $fetch. Both transports can continue through
+   * SPA navigation unless explicitly cancelled. This does not guarantee
+   * completion through page unload, and native fetch requires a browser URL.
    */
   detached?: boolean
 }

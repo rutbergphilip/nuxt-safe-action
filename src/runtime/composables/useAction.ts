@@ -1,188 +1,142 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { ref, computed, readonly } from 'vue'
-import type {
-  SafeAction,
-  SafeActionReference,
-  ActionResult,
-  ActionStatus,
-  ValidationErrors,
-  UseActionReturn,
-  UseActionCallbacks,
-} from '../types'
+import { ref, computed, readonly, getCurrentScope, onScopeDispose } from 'vue'
+import type { SafeAction, SafeActionReference, ActionResult, ActionStatus, ValidationErrors, UseActionReturn, UseActionCallbacks } from '../types'
 
-/**
- * Vue composable for executing a safe action with reactive status tracking.
- *
- * ```vue
- * <script setup lang="ts">
- * import { createPost } from '#safe-action/actions'
- *
- * const { execute, data, status, error } = useAction(createPost, {
- *   onSuccess({ data }) { console.log('Created:', data) },
- * })
- * </script>
- * ```
- */
+export interface ActionRequestOptions {
+  headers?: HeadersInit | (() => HeadersInit)
+  credentials?: RequestCredentials
+  signal?: AbortSignal
+  /** Timeout in milliseconds. No timeout is applied by default. */
+  timeout?: number
+  /** Opt in to aborting owned requests when the component scope is disposed. */
+  abortOnDispose?: boolean
+  cancelPrevious?: boolean
+}
+
+export type UseActionOptions<TInput, TOutput, TServerError = string> = UseActionCallbacks<TInput, TOutput, TServerError> & ActionRequestOptions
+
+/** Latest execution owns reactive state; each call still resolves its own result. */
 export function useAction<TInput, TOutput, TServerError = string>(
-  action:
-    | SafeAction<TInput, TOutput, TServerError>
-    | SafeActionReference<TInput, TOutput, TServerError>,
-  callbacks?: UseActionCallbacks<TInput, TOutput, TServerError>,
-): UseActionReturn<TInput, TOutput, TServerError> {
-  const actionPath = (action as any).__safeActionPath as string
-  const actionMethod = ((action as any).__safeActionMethod as string) || 'POST'
-
+  action: SafeAction<TInput, TOutput, TServerError> | SafeActionReference<TInput, TOutput, TServerError>,
+  options: UseActionOptions<TInput, TOutput, TServerError> = {},
+): UseActionReturn<TInput, TOutput, TServerError> & { cancel: () => void } {
+  const reference = action as SafeActionReference<TInput, TOutput, TServerError> & { __safeActionMethod?: string }
+  const actionPath = reference.__safeActionPath
+  const actionMethod = reference.__safeActionMethod || 'POST'
   const data = ref<TOutput>() as import('vue').Ref<TOutput | undefined>
   const serverError = ref<TServerError>() as import('vue').Ref<TServerError | undefined>
-  const validationErrors = ref<ValidationErrors>() as import('vue').Ref<
-    ValidationErrors | undefined
-  >
-  const status = ref<ActionStatus>('idle') as import('vue').Ref<ActionStatus>
+  const validationErrors = ref<ValidationErrors>()
+  const status = ref<ActionStatus>('idle')
+  const requests = new Set<AbortController>()
+  let revision = 0
 
-  async function executeAsync(input: TInput): Promise<ActionResult<TOutput, TServerError>> {
-    serverError.value = undefined
-    validationErrors.value = undefined
-    status.value = 'executing'
-
-    callbacks?.onExecute?.({ input })
-
-    const url = actionMethod === 'GET' && input != null
-      ? `/api/_actions/${actionPath}?input=${encodeURIComponent(JSON.stringify(input))}`
-      : `/api/_actions/${actionPath}`
-
-    // Detached mode: use raw fetch() which survives SPA navigation
-    if (callbacks?.detached) {
-      return executeDetached(url, input)
-    }
-
-    try {
-      const fetchOptions: Parameters<typeof $fetch>[1] = actionMethod === 'GET'
-        ? { method: 'GET' }
-        : { method: actionMethod as 'POST' | 'PUT' | 'PATCH' | 'DELETE', body: input as Record<string, unknown> }
-
-      const result = await $fetch<ActionResult<TOutput, TServerError>>(url, fetchOptions)
-
-      processResult(result, input)
-      callbacks?.onSettled?.({ result, input })
-      return result
-    } catch (fetchError) {
-      const message =
-        fetchError instanceof Error ? fetchError.message : 'An unexpected error occurred'
-
-      serverError.value = message as TServerError
-      status.value = 'hasErrored'
-
-      const result: ActionResult<TOutput, TServerError> = {
-        serverError: message as TServerError,
-      }
-
-      callbacks?.onError?.({ error: { serverError: message as TServerError }, input })
-      callbacks?.onSettled?.({ result, input })
-
-      return result
-    }
+  function diagnose(error: unknown): void {
+    // User callbacks cannot alter a completed action's transport result.
+    try { console.error('[nuxt-safe-action] Action callback failed:', error) } catch { /* logging is best effort */ }
   }
 
-  /**
-   * Execute using raw fetch() — request survives SPA navigation.
-   * Parses the response into the same ActionResult shape and updates
-   * all reactive refs and callbacks identically to the $fetch path.
-   */
-  async function executeDetached(url: string, input: TInput): Promise<ActionResult<TOutput, TServerError>> {
-    try {
-      const fetchInit: RequestInit = actionMethod === 'GET'
-        ? { method: 'GET' }
-        : {
-            method: actionMethod,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(input),
-          }
-
-      const response = await fetch(url, fetchInit)
-
-      if (!response.ok) {
-        const message = `HTTP ${response.status}`
-        serverError.value = message as TServerError
-        status.value = 'hasErrored'
-
-        const result: ActionResult<TOutput, TServerError> = {
-          serverError: message as TServerError,
-        }
-
-        callbacks?.onError?.({ error: { serverError: message as TServerError }, input })
-        callbacks?.onSettled?.({ result, input })
-        return result
-      }
-
-      const result = (await response.json()) as ActionResult<TOutput, TServerError>
-
-      processResult(result, input)
-      callbacks?.onSettled?.({ result, input })
-      return result
-    } catch (fetchError) {
-      const message =
-        fetchError instanceof Error ? fetchError.message : 'An unexpected error occurred'
-
-      serverError.value = message as TServerError
-      status.value = 'hasErrored'
-
-      const result: ActionResult<TOutput, TServerError> = {
-        serverError: message as TServerError,
-      }
-
-      callbacks?.onError?.({ error: { serverError: message as TServerError }, input })
-      callbacks?.onSettled?.({ result, input })
-      return result
-    }
+  function notify(callback: (() => unknown) | undefined): void {
+    if (!callback) return
+    try { void Promise.resolve(callback()).catch(diagnose) } catch (error) { diagnose(error) }
   }
 
-  /** Shared result processing for both $fetch and detached paths. */
-  function processResult(result: ActionResult<TOutput, TServerError>, input: TInput): void {
-    if (result.data !== undefined) {
-      data.value = result.data
-      status.value = 'hasSucceeded'
-      callbacks?.onSuccess?.({ data: result.data, input })
-    } else if (result.serverError !== undefined) {
-      serverError.value = result.serverError
-      status.value = 'hasErrored'
-      callbacks?.onError?.({
-        error: { serverError: result.serverError },
-        input,
-      })
-    } else if (result.validationErrors !== undefined) {
-      validationErrors.value = result.validationErrors
-      status.value = 'hasErrored'
-      callbacks?.onError?.({
-        error: { validationErrors: result.validationErrors },
-        input,
-      })
-    }
-  }
-
-  function execute(input: TInput): void {
-    executeAsync(input)
-  }
-
-  function reset(): void {
-    data.value = undefined
-    serverError.value = undefined
-    validationErrors.value = undefined
+  function cancel(): void {
+    revision++
+    for (const controller of requests) controller.abort()
     status.value = 'idle'
   }
 
+  function reset(): void {
+    cancel()
+    data.value = undefined
+    serverError.value = undefined
+    validationErrors.value = undefined
+  }
+
+  if (options.abortOnDispose && getCurrentScope()) onScopeDispose(cancel)
+
+  async function executeAsync(input: TInput): Promise<ActionResult<TOutput, TServerError>> {
+    if (options.cancelPrevious) cancel()
+    const ownRevision = ++revision
+    const controller = new AbortController()
+    requests.add(controller)
+    serverError.value = undefined
+    validationErrors.value = undefined
+    status.value = 'executing'
+    notify(options.onExecute && (() => options.onExecute!({ input })))
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let rejectAbort: (error: Error) => void = () => {}
+    const aborted = new Promise<never>((_, reject) => { rejectAbort = reject })
+    const onAbort = () => rejectAbort(new Error(controller.signal.reason instanceof Error ? controller.signal.reason.message : 'Action request cancelled'))
+    controller.signal.addEventListener('abort', onAbort, { once: true })
+    const externalAbort = () => controller.abort(options.signal?.reason)
+    options.signal?.addEventListener('abort', externalAbort, { once: true })
+    if (options.signal?.aborted) externalAbort()
+    if (options.timeout !== undefined && options.timeout > 0) {
+      timer = setTimeout(() => controller.abort(new Error('Action request timed out')), options.timeout)
+    }
+
+    let result: ActionResult<TOutput, TServerError>
+    try {
+      if (typeof actionPath !== 'string' || !actionPath) throw new Error('Expected a typed action reference from #safe-action/actions')
+      const url = actionMethod === 'GET' && input !== undefined
+        ? `/api/_actions/${actionPath}?input=${encodeURIComponent(JSON.stringify(input))}`
+        : `/api/_actions/${actionPath}`
+      const headers = new Headers(typeof options.headers === 'function' ? options.headers() : options.headers)
+      if (actionMethod !== 'GET' && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+      const body = actionMethod === 'GET' ? undefined : JSON.stringify(input)
+      const request: RequestInit = { method: actionMethod, headers, signal: controller.signal, credentials: options.credentials, body }
+      const transport = async (): Promise<unknown> => {
+        if (controller.signal.aborted) throw new Error('Action request cancelled')
+        if (options.detached) {
+          const response = await fetch(url, request)
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          return response.json()
+        }
+        // Disable ofetch's automatic retries: repeating mutations requires application-level idempotency.
+        return $fetch(url, {
+          method: actionMethod as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+          headers, signal: controller.signal, credentials: options.credentials, retry: 0,
+          ...(actionMethod === 'GET' ? {} : { body }),
+        })
+      }
+      const payload = await Promise.race([aborted, transport()])
+      if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Invalid action response')
+      result = payload as ActionResult<TOutput, TServerError>
+    } catch (error) {
+      result = { serverError: (error instanceof Error ? error.message : 'An unexpected error occurred') as TServerError }
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+      options.signal?.removeEventListener('abort', externalAbort)
+      controller.signal.removeEventListener('abort', onAbort)
+      requests.delete(controller)
+    }
+
+    if (ownRevision === revision) {
+      if (result.serverError !== undefined || result.validationErrors !== undefined) {
+        serverError.value = result.serverError
+        validationErrors.value = result.validationErrors
+        status.value = 'hasErrored'
+        notify(options.onError && (() => options.onError!({ error: { serverError: result.serverError, validationErrors: result.validationErrors }, input })))
+      } else {
+        // A void action serializes as {}; undefined is a valid success value.
+        data.value = result.data
+        status.value = 'hasSucceeded'
+        notify(options.onSuccess && (() => options.onSuccess!({ data: result.data as TOutput, input })))
+      }
+      if (ownRevision === revision) notify(options.onSettled && (() => options.onSettled!({ result, input })))
+    }
+    return result
+  }
+
+  function execute(input: TInput): void { void executeAsync(input) }
   return {
-    execute,
-    executeAsync,
+    execute, executeAsync, cancel, reset,
     data: readonly(data) as Readonly<import('vue').Ref<TOutput | undefined>>,
     serverError: readonly(serverError) as Readonly<import('vue').Ref<TServerError | undefined>>,
-    validationErrors: readonly(validationErrors) as Readonly<
-      import('vue').Ref<ValidationErrors | undefined>
-    >,
-    status: readonly(status) as Readonly<import('vue').Ref<ActionStatus>>,
+    validationErrors: readonly(validationErrors) as Readonly<import('vue').Ref<ValidationErrors | undefined>>, status: readonly(status),
     isIdle: computed(() => status.value === 'idle'),
     isExecuting: computed(() => status.value === 'executing'),
     hasSucceeded: computed(() => status.value === 'hasSucceeded'),
     hasErrored: computed(() => status.value === 'hasErrored'),
-    reset,
   }
 }

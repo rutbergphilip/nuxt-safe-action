@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { toggleTask } from '#safe-action/actions'
 
 const tasks = ref([

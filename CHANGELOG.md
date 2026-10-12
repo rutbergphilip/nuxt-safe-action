@@ -4,7 +4,7 @@
 
 ### Features
 
-- Standard Schema v1 validation with Zod, Valibot, ArkType, and compliant validators; legacy Zod 3.20+ support retained.
+- Standard Schema v1 validation with Zod, Valibot, ArkType, Yup 1.7+, and compliant validators; legacy Zod 3.20+ support retained.
 - Input/output transform inference, default input handling, and asynchronous input/output validation.
 - `useFormAction` with inferred values, snapshot submission, initial-value reset, and separate nested/root errors.
 - `useOptimisticAction` with immutable updates, replacement of pending operations, guarded rollback, and application-controlled reconciliation.
@@ -24,6 +24,7 @@
 
 - Working nested forms and optimistic success/rollback examples, Nuxt UI, authentication/ownership, Standard Schema, and Nuxt SSR-query recipes.
 - Clarified detached transport and cancellation limits, result semantics, middleware context replacement, and error exposure.
+- Native Yup input/output contracts, defaults, casting, asynchronous tests, and nested validation errors verified alongside the other supported validators.
 - Nuxt 3/4 and Zod 3/4 CI matrix, additional validator/transport regression tests, packed-install checks, and documentation build in the release gate.
 - Existing `execute(): void`, `executeAsync(): Promise<ActionResult>`, callback argument shapes, and single-method exports preserved.
 

@@ -37,11 +37,26 @@ export type InferSchemaOutput<TSchema> =
   TSchema extends StandardSchemaV1<unknown, infer TOutput> ? TOutput :
   TSchema extends LegacyActionSchema<unknown, infer TOutput> ? TOutput : never
 
+/** A failure that happened on the client before a valid action envelope arrived. */
+export interface ActionClientError {
+  kind: 'network' | 'http' | 'timeout' | 'aborted' | 'invalid-response' | 'invalid-reference'
+  message: string
+  /** HTTP status for `kind: 'http'`. */
+  status?: number
+}
+
 export interface ActionResult<TOutput, TServerError = string, TBusinessError = never> {
   data?: TOutput
+  /**
+   * Error returned by the server. For client-side failures this also holds
+   * `clientError.message` for backwards compatibility; check `clientError` to
+   * tell them apart, since a custom `TServerError` type does not apply there.
+   */
   serverError?: TServerError
   businessError?: TBusinessError
   validationErrors?: ValidationErrors
+  /** Set only by client composables when no valid envelope was received. */
+  clientError?: ActionClientError
 }
 
 export type ValidationErrors = Record<string, string[]>
@@ -137,8 +152,18 @@ export type ActionHandler<TCtx, TInput, TOutput, TBusinessError = never, TErrorI
 
 export type ActionMetadata = Record<string, unknown>
 
+/** Request context passed to `handleServerError` for logging and mapping. */
+export interface ServerErrorInfo {
+  event: H3Event
+  metadata: ActionMetadata
+  /** Raw, unvalidated client input. Avoid logging sensitive fields. */
+  clientInput: unknown
+}
+
+export type ServerErrorHandler<TServerError = string> = (error: Error, info: ServerErrorInfo) => TServerError
+
 export interface SafeActionClientOpts<TServerError = string> {
-  handleServerError?: (error: Error) => TServerError
+  handleServerError?: ServerErrorHandler<TServerError>
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -149,7 +174,7 @@ export interface ActionConfig<TServerError = string> {
   metadata: ActionMetadata
   businessErrors?: Readonly<Record<string, string>>
   handler: ActionHandler<any, any, any, any>
-  handleServerError?: (error: Error) => TServerError
+  handleServerError?: ServerErrorHandler<TServerError>
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -177,6 +202,8 @@ export interface UseActionReturn<TInput, TOutput, TServerError = string, TBusine
   executeAsync: (input: TInput) => Promise<ActionResult<TOutput, TServerError, TBusinessError>>
   data: Readonly<import('vue').Ref<TOutput | undefined>>
   serverError: Readonly<import('vue').Ref<TServerError | undefined>>
+  /** Transport, timeout, cancellation or HTTP failure of the latest execution. */
+  clientError: Readonly<import('vue').Ref<ActionClientError | undefined>>
   businessError: Readonly<import('vue').Ref<TBusinessError | undefined>>
   isRefreshing: Readonly<import('vue').Ref<boolean>>
   refreshError: Readonly<import('vue').Ref<Error | null>>
@@ -192,7 +219,7 @@ export interface UseActionReturn<TInput, TOutput, TServerError = string, TBusine
 export interface UseActionCallbacks<TInput, TOutput, TServerError = string, TBusinessError = never> {
   onSuccess?: (args: { data: TOutput; input: TInput }) => void
   onError?: (args: {
-    error: { serverError?: TServerError; businessError?: TBusinessError; validationErrors?: ValidationErrors }
+    error: { serverError?: TServerError; businessError?: TBusinessError; validationErrors?: ValidationErrors; clientError?: ActionClientError }
     input: TInput
   }) => void
   onSettled?: (args: { result: ActionResult<TOutput, TServerError, TBusinessError>; input: TInput }) => void

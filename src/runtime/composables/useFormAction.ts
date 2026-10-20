@@ -139,7 +139,7 @@ export function useFormAction<TInput, TOutput, TServerError = string, TBusinessE
       const errors = await validateFormSnapshot(options.clientSchema, cloneFormValue(snapshot))
       if (ownFormGeneration !== formGeneration || ownValidationGeneration !== validationGeneration) {
         if (ownFormGeneration === formGeneration) localStatus.value = undefined
-        return { serverError: 'Action request cancelled' as TServerError }
+        return { serverError: 'Action request cancelled' as TServerError, clientError: { kind: 'aborted', message: 'Action request cancelled' } }
       }
       isValidating.value = false
       clientErrors.value = errors
@@ -180,6 +180,7 @@ export function useFormAction<TInput, TOutput, TServerError = string, TBusinessE
     getFieldValue, setFieldValue, getFieldErrors, setTouched, isFieldDirty, isFieldTouched, clearErrors, validate,
     dirtyFields, touchedFields, isDirty, isTouched, isValidating: readonly(isValidating), validationErrors, status,
     serverError: computed(() => localStatus.value ? undefined : execution.serverError.value),
+    clientError: computed(() => localStatus.value ? undefined : execution.clientError.value),
     businessError: computed(() => localStatus.value ? undefined : execution.businessError.value),
     isIdle: computed(() => status.value === 'idle'),
     isExecuting: computed(() => status.value === 'executing'),

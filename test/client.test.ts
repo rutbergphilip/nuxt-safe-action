@@ -125,12 +125,44 @@ describe('useAction request ownership', () => {
       .mockResolvedValueOnce({ ok: false, status: 503 })
     vi.stubGlobal('fetch', fetch)
     const client = useAction(action(), { detached: true, headers: { 'X-Custom': 'test' } })
-    expect(await client.executeAsync({ name: 'x' })).toEqual({ serverError: 'Invalid action response' })
+    expect(await client.executeAsync({ name: 'x' })).toEqual({ serverError: 'Invalid action response', clientError: { kind: 'invalid-response', message: 'Invalid action response' } })
     const request = fetch.mock.calls[0]![1]
     expect(request.body).toBe('{"name":"x"}')
     expect(request.headers.get('Content-Type')).toBe('application/json')
     expect(request.headers.get('X-Custom')).toBe('test')
-    expect(await client.executeAsync({ name: 'x' })).toEqual({ serverError: 'HTTP 503' })
+    expect(await client.executeAsync({ name: 'x' })).toEqual({ serverError: 'HTTP 503', clientError: { kind: 'http', message: 'HTTP 503', status: 503 } })
+  })
+
+  it('classifies client failures separately from server errors', async () => {
+    const httpError = Object.assign(new Error('[POST] "/api/_actions/test": 403 Forbidden'), { statusCode: 403 })
+    const response = deferred<ActionResult<string>>()
+    vi.stubGlobal('$fetch', vi.fn()
+      .mockRejectedValueOnce(httpError)
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockReturnValueOnce(response.promise)
+      .mockResolvedValueOnce({ serverError: 'Mapped', clientError: { kind: 'network', message: 'forged' } }))
+    const onError = vi.fn()
+    const client = useAction(action(), { onError })
+
+    expect((await client.executeAsync({ name: 'x' })).clientError).toEqual({ kind: 'http', message: httpError.message, status: 403 })
+    expect(onError.mock.calls[0]![0].error.clientError).toEqual({ kind: 'http', message: httpError.message, status: 403 })
+    expect((await client.executeAsync({ name: 'x' })).clientError).toEqual({ kind: 'network', message: 'Failed to fetch' })
+
+    const pending = client.executeAsync({ name: 'x' })
+    client.cancel()
+    expect((await pending).clientError?.kind).toBe('aborted')
+
+    // A server envelope cannot claim to be a client-side failure.
+    expect(await client.executeAsync({ name: 'x' })).toEqual({ serverError: 'Mapped' })
+    expect(client.serverError.value).toBe('Mapped')
+    expect(client.clientError.value).toBeUndefined()
+    client.reset()
+    expect(client.clientError.value).toBeUndefined()
+  })
+
+  it('reports a missing action reference as invalid-reference', async () => {
+    const client = useAction({} as SafeActionReference<{ name: string }, string>)
+    expect((await client.executeAsync({ name: 'x' })).clientError?.kind).toBe('invalid-reference')
   })
 
   it('supports timeout even when a transport ignores the signal', async () => {
@@ -140,7 +172,8 @@ describe('useAction request ownership', () => {
     const client = useAction(action(), { timeout: 25, onSettled })
     const pending = client.executeAsync({ name: 'x' })
     await vi.advanceTimersByTimeAsync(25)
-    expect(await pending).toEqual({ serverError: 'Action request timed out' })
+    expect(await pending).toEqual({ serverError: 'Action request timed out', clientError: { kind: 'timeout', message: 'Action request timed out' } })
+    expect(client.clientError.value).toEqual({ kind: 'timeout', message: 'Action request timed out' })
     expect(client.status.value).toBe('hasErrored')
     expect(onSettled).toHaveBeenCalledTimes(1)
   })

@@ -1,5 +1,6 @@
-import { describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
+import { createError } from 'h3'
 import type { H3Event } from 'h3'
 import type { InferSafeActionInput, InferSafeActionOutput, StandardSchemaV1, MiddlewareArgs } from '../src/runtime/types'
 import { createSafeActionClient } from '../src/runtime/server/createSafeActionClient'
@@ -164,5 +165,46 @@ describe('middleware and error safety', () => {
       .toEqual({ serverError: 'Public message' })
     expect(await client.action(() => returnValidationErrors({ email: ['Taken'] }))._execute(undefined, event))
       .toEqual({ validationErrors: { email: ['Taken'] } })
+  })
+})
+
+describe('unexpected error observability', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('passes request context to handleServerError', async () => {
+    const handleServerError = vi.fn((error: Error) => `mapped:${error.message}`)
+    const action = createSafeActionClient({ handleServerError })
+      .metadata({ actionName: 'boom' })
+      .action(() => { throw new Error('db down') })
+    expect(await action._execute({ id: 1 }, event)).toEqual({ serverError: 'mapped:db down' })
+    expect(handleServerError).toHaveBeenCalledWith(expect.any(Error), { event, metadata: { actionName: 'boom' }, clientInput: { id: 1 } })
+  })
+
+  it('logs masked errors when no mapper is configured, and when the mapper throws', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const failure = new Error('db down')
+    expect(await createSafeActionClient().action(() => { throw failure })._execute(undefined, event))
+      .toEqual({ serverError: 'An unexpected error occurred' })
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('[nuxt-safe-action]'), failure)
+
+    log.mockClear()
+    const mapperFailure = new Error('mapper broke')
+    expect(await createSafeActionClient({ handleServerError: () => { throw mapperFailure } }).action(() => { throw failure })._execute(undefined, event))
+      .toEqual({ serverError: 'An unexpected error occurred' })
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('[nuxt-safe-action]'), mapperFailure)
+  })
+
+  it('keeps the public message of 4xx createError and masks 5xx', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const client = createSafeActionClient().use(async ({ next, clientInput }) => {
+      if (clientInput === 'anonymous') throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+      if (clientInput === 'crash') throw createError({ statusCode: 500, statusMessage: 'Connection string leaked' })
+      return next({ ctx: {} })
+    })
+    const action = client.action(() => 'ok')
+    expect(await action._execute('anonymous', event)).toEqual({ serverError: 'Unauthorized' })
+    expect(log).not.toHaveBeenCalled()
+    expect(await action._execute('crash', event)).toEqual({ serverError: 'An unexpected error occurred' })
+    expect(log).toHaveBeenCalledTimes(1)
   })
 })

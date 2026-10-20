@@ -36,6 +36,26 @@ describe('nuxt-safe-action', async () => {
     })
   })
 
+  describe('same-origin protection (csrf: strict default)', () => {
+    it('rejects a cross-site form post without running the action', async () => {
+      const error = await $fetch('/api/_actions/greet', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', 'sec-fetch-site': 'cross-site' },
+        body: 'name=Attacker',
+      }).catch(e => e) as { statusCode?: number }
+      expect(error.statusCode).toBe(403)
+    })
+
+    it('rejects a form-urlencoded body from the same origin with 415', async () => {
+      const error = await $fetch('/api/_actions/greet', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: 'name=Attacker',
+      }).catch(e => e) as { statusCode?: number }
+      expect(error.statusCode).toBe(415)
+    })
+  })
+
   describe('input validation', () => {
     it('returns validation errors for invalid input', async () => {
       const result = await $fetch<{ validationErrors?: Record<string, string[]> }>(

@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.8.0
+
+### Breaking changes
+
+- **Same-origin protection is on by default.** Non-GET action routes accept only same-origin JSON (`safeAction.csrf: 'strict'`). Form-urlencoded, multipart, `text/plain` and untyped bodies return `415`; a cross-site `Sec-Fetch-Site` or mismatched `Origin` returns `403` (`X-Forwarded-Host` is honored behind proxies). `useAction` and `useFormAction` already send same-origin JSON. Set `safeAction: { csrf: 'off' }` to restore 0.7 body parsing.
+- **Actions without `.schema()` type `parsedInput` as `unknown`** instead of `undefined`, matching the raw client input they receive. Type-only; narrow the value before use.
+- **Nuxt 3.8.0 or newer is required.** The module always relied on `addServerImports` from `@nuxt/kit` 3.8; the declared range now says so, and CI tests 3.8.0 alongside the latest Nuxt 3 and 4.
+
+### Features
+
+- `handleServerError(error, { event, metadata, clientInput })` receives request context for logging and mapping. Existing one-argument mappers keep working.
+- Unexpected errors are logged on the server when no mapper is configured or the mapper throws. Logs include the method and pathname, never the query string that carries GET input.
+- 4xx H3 errors such as `createError({ statusCode: 401, statusMessage: 'Unauthorized' })` keep their public message instead of the generic fallback when no mapper is configured. 5xx errors stay masked.
+- `clientError` on `useAction`, `useFormAction` and results distinguishes client-side failures: `network`, `http` (with `status`), `timeout`, `aborted`, `invalid-response`, `invalid-reference`. `serverError` still carries the message for compatibility.
+- `useOptimisticAction({ mode: 'merge' })` keeps overlapping optimistic updates against a confirmed base and rolls back only the update that failed, without cancelling earlier requests. `mode: 'replace'` remains the default.
+- `useFormAction().setInitialValues(values, { keepValues? })` rebases dirty tracking on data loaded after setup; `initialValues` is exposed as a readonly ref.
+
+### Fixes
+
+- `isDirty`, `dirtyFields` and `isFieldDirty` no longer go stale after their first read; nested edits are tracked reactively.
+- Non-plain form values (`File`, `Map`, class instances) are kept by reference and compared by identity, with a one-time warning, instead of silently becoming `{}`.
+- Removed the unused `defu` dependency.
+
+### Documentation
+
+- Same-origin protection, error context and `clientError`, async form initial values, plain-data form values, and optimistic `merge` mode.
+- Comparison page updated with business errors, form state, same-origin protection and middleware/validation order, checked against nuxt-actions 1.3.0.
+
 ## v0.7.0
 
 ### Features

@@ -1,4 +1,4 @@
-import { ref, computed, readonly, getCurrentScope, onScopeDispose } from 'vue'
+import { ref, shallowRef, computed, readonly, getCurrentScope, onScopeDispose } from 'vue'
 import type { Ref } from 'vue'
 import type { SafeAction, SafeActionReference, ValidationErrors, StandardSchemaV1, FieldPath, FieldPathValue, ActionStatus, ActionResult } from '../types'
 import { useAction } from './useAction'
@@ -18,8 +18,8 @@ export function useFormAction<TInput, TOutput, TServerError = string, TBusinessE
   action: SafeAction<TInput, TOutput, TServerError, TBusinessError> | SafeActionReference<TInput, TOutput, TServerError, TBusinessError>,
   options: UseFormActionOptions<TInput, TOutput, TServerError, TBusinessError>,
 ) {
-  const initialValues = cloneFormValue(options.initialValues)
-  const values = ref(cloneFormValue(initialValues)) as Ref<TInput>
+  const initialValues = shallowRef(cloneFormValue(options.initialValues)) as Ref<TInput>
+  const values = ref(cloneFormValue(initialValues.value)) as Ref<TInput>
   const touched = ref<string[]>([])
   const clientErrors = ref<ValidationErrors>({})
   const serverErrors = ref<ValidationErrors>({})
@@ -87,16 +87,16 @@ export function useFormAction<TInput, TOutput, TServerError = string, TBusinessE
   })
   const rootErrors = computed(() => [...(validationErrors.value?._root || []), ...(validationErrors.value?._errors || [])])
   const fieldErrors = computed<ValidationErrors>(() => Object.fromEntries(Object.entries(validationErrors.value || {}).filter(([key]) => key !== '_errors' && key !== '_root')))
-  const dirtyFields = computed(() => dirtyFormPaths(values.value, initialValues) as readonly FieldPath<TInput>[])
+  const dirtyFields = computed(() => dirtyFormPaths(values.value, initialValues.value) as readonly FieldPath<TInput>[])
   const touchedFields = computed(() => [...touched.value] as readonly FieldPath<TInput>[])
-  const isDirty = computed(() => !sameFormValue(values.value, initialValues))
+  const isDirty = computed(() => !sameFormValue(values.value, initialValues.value))
   const isTouched = computed(() => touched.value.length > 0)
   const status = computed(() => localStatus.value || execution.status.value)
 
   function getFieldValue<P extends string>(path: P & FieldPath<TInput>): FieldPathValue<TInput, P> | undefined { return getFormValue(values.value, path) as FieldPathValue<TInput, P> | undefined }
   function setFieldValue<P extends string>(path: P & FieldPath<TInput>, value: FieldPathValue<TInput, P>): void { setFormValue(values.value, path, value) }
   function getFieldErrors<P extends string>(path: P & FieldPath<TInput>): readonly string[] { return fieldErrors.value[path] || [] }
-  function isFieldDirty<P extends string>(path: P & FieldPath<TInput>): boolean { return !sameFormValue(getFormValue(values.value, path), getFormValue(initialValues, path)) }
+  function isFieldDirty<P extends string>(path: P & FieldPath<TInput>): boolean { return !sameFormValue(getFormValue(values.value, path), getFormValue(initialValues.value, path)) }
   function isFieldTouched<P extends string>(path: P & FieldPath<TInput>): boolean { return touched.value.includes(path) }
   function setTouched<P extends string>(path: P & FieldPath<TInput>, touch = true): void {
     // Validate paths even though touching itself never writes into form values.
@@ -139,7 +139,7 @@ export function useFormAction<TInput, TOutput, TServerError = string, TBusinessE
       const errors = await validateFormSnapshot(options.clientSchema, cloneFormValue(snapshot))
       if (ownFormGeneration !== formGeneration || ownValidationGeneration !== validationGeneration) {
         if (ownFormGeneration === formGeneration) localStatus.value = undefined
-        return { serverError: 'Action request cancelled' as TServerError }
+        return { serverError: 'Action request cancelled' as TServerError, clientError: { kind: 'aborted', message: 'Action request cancelled' } }
       }
       isValidating.value = false
       clientErrors.value = errors
@@ -170,16 +170,29 @@ export function useFormAction<TInput, TOutput, TServerError = string, TBusinessE
     clientErrors.value = {}
     serverErrors.value = {}
     touched.value = []
-    values.value = cloneFormValue(initialValues)
+    values.value = cloneFormValue(initialValues.value)
+  }
+
+  /**
+   * Rebase dirty tracking on newly loaded data without cancelling a pending
+   * submission. Current values follow the new baseline unless the user has
+   * already edited the form; pass `{ keepValues: true }` to never replace them.
+   * Call `reset()` afterwards to also discard edits, errors and touched state.
+   */
+  function setInitialValues(nextInitialValues: TInput, setOptions: { keepValues?: boolean } = {}): void {
+    const wasDirty = !sameFormValue(values.value, initialValues.value)
+    initialValues.value = cloneFormValue(nextInitialValues)
+    if (!setOptions.keepValues && !wasDirty) values.value = cloneFormValue(initialValues.value)
   }
 
   if (options.abortOnDispose && getCurrentScope()) onScopeDispose(cancel)
 
   return {
-    ...execution, values, submit, cancel, reset, fieldErrors, rootErrors,
+    ...execution, values, submit, cancel, reset, setInitialValues, initialValues: readonly(initialValues) as Readonly<Ref<TInput>>, fieldErrors, rootErrors,
     getFieldValue, setFieldValue, getFieldErrors, setTouched, isFieldDirty, isFieldTouched, clearErrors, validate,
     dirtyFields, touchedFields, isDirty, isTouched, isValidating: readonly(isValidating), validationErrors, status,
     serverError: computed(() => localStatus.value ? undefined : execution.serverError.value),
+    clientError: computed(() => localStatus.value ? undefined : execution.clientError.value),
     businessError: computed(() => localStatus.value ? undefined : execution.businessError.value),
     isIdle: computed(() => status.value === 'idle'),
     isExecuting: computed(() => status.value === 'executing'),

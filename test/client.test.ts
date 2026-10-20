@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { effectScope, ref } from 'vue'
+import { effectScope, ref, toRaw } from 'vue'
 import { useAction } from '../src/runtime/composables/useAction'
 import { useFormAction } from '../src/runtime/composables/useFormAction'
 import { useOptimisticAction } from '../src/runtime/composables/useOptimisticAction'
@@ -125,12 +125,44 @@ describe('useAction request ownership', () => {
       .mockResolvedValueOnce({ ok: false, status: 503 })
     vi.stubGlobal('fetch', fetch)
     const client = useAction(action(), { detached: true, headers: { 'X-Custom': 'test' } })
-    expect(await client.executeAsync({ name: 'x' })).toEqual({ serverError: 'Invalid action response' })
+    expect(await client.executeAsync({ name: 'x' })).toEqual({ serverError: 'Invalid action response', clientError: { kind: 'invalid-response', message: 'Invalid action response' } })
     const request = fetch.mock.calls[0]![1]
     expect(request.body).toBe('{"name":"x"}')
     expect(request.headers.get('Content-Type')).toBe('application/json')
     expect(request.headers.get('X-Custom')).toBe('test')
-    expect(await client.executeAsync({ name: 'x' })).toEqual({ serverError: 'HTTP 503' })
+    expect(await client.executeAsync({ name: 'x' })).toEqual({ serverError: 'HTTP 503', clientError: { kind: 'http', message: 'HTTP 503', status: 503 } })
+  })
+
+  it('classifies client failures separately from server errors', async () => {
+    const httpError = Object.assign(new Error('[POST] "/api/_actions/test": 403 Forbidden'), { statusCode: 403 })
+    const response = deferred<ActionResult<string>>()
+    vi.stubGlobal('$fetch', vi.fn()
+      .mockRejectedValueOnce(httpError)
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockReturnValueOnce(response.promise)
+      .mockResolvedValueOnce({ serverError: 'Mapped', clientError: { kind: 'network', message: 'forged' } }))
+    const onError = vi.fn()
+    const client = useAction(action(), { onError })
+
+    expect((await client.executeAsync({ name: 'x' })).clientError).toEqual({ kind: 'http', message: httpError.message, status: 403 })
+    expect(onError.mock.calls[0]![0].error.clientError).toEqual({ kind: 'http', message: httpError.message, status: 403 })
+    expect((await client.executeAsync({ name: 'x' })).clientError).toEqual({ kind: 'network', message: 'Failed to fetch' })
+
+    const pending = client.executeAsync({ name: 'x' })
+    client.cancel()
+    expect((await pending).clientError?.kind).toBe('aborted')
+
+    // A server envelope cannot claim to be a client-side failure.
+    expect(await client.executeAsync({ name: 'x' })).toEqual({ serverError: 'Mapped' })
+    expect(client.serverError.value).toBe('Mapped')
+    expect(client.clientError.value).toBeUndefined()
+    client.reset()
+    expect(client.clientError.value).toBeUndefined()
+  })
+
+  it('reports a missing action reference as invalid-reference', async () => {
+    const client = useAction({} as SafeActionReference<{ name: string }, string>)
+    expect((await client.executeAsync({ name: 'x' })).clientError?.kind).toBe('invalid-reference')
   })
 
   it('supports timeout even when a transport ignores the signal', async () => {
@@ -140,7 +172,8 @@ describe('useAction request ownership', () => {
     const client = useAction(action(), { timeout: 25, onSettled })
     const pending = client.executeAsync({ name: 'x' })
     await vi.advanceTimersByTimeAsync(25)
-    expect(await pending).toEqual({ serverError: 'Action request timed out' })
+    expect(await pending).toEqual({ serverError: 'Action request timed out', clientError: { kind: 'timeout', message: 'Action request timed out' } })
+    expect(client.clientError.value).toEqual({ kind: 'timeout', message: 'Action request timed out' })
     expect(client.status.value).toBe('hasErrored')
     expect(onSettled).toHaveBeenCalledTimes(1)
   })
@@ -334,5 +367,110 @@ describe('useOptimisticAction', () => {
     await pending
     expect(currentData.value).toEqual(['authoritative'])
     response.resolve({ serverError: 'late' })
+  })
+})
+
+describe('useOptimisticAction merge mode', () => {
+  type Task = { id: string; done: boolean }
+  const toggle = (input: Task, tasks: Task[]) => tasks.map(task => task.id === input.id ? { ...task, done: input.done } : task)
+
+  it('keeps overlapping updates on different items applied and matching the server', async () => {
+    const first = deferred<ActionResult<Task>>()
+    const second = deferred<ActionResult<Task>>()
+    const fetch = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    vi.stubGlobal('$fetch', fetch)
+    const currentData = ref<Task[]>([{ id: '1', done: false }, { id: '2', done: false }])
+    const client = useOptimisticAction(action<Task, Task>(), { currentData, updateFn: toggle, mode: 'merge' })
+    const a = client.executeAsync({ id: '1', done: true })
+    const b = client.executeAsync({ id: '2', done: true })
+    expect(currentData.value).toEqual([{ id: '1', done: true }, { id: '2', done: true }])
+    const firstSignal = fetch.mock.calls[0]![1].signal as AbortSignal
+    expect(firstSignal.aborted).toBe(false)
+    first.resolve({ data: { id: '1', done: true } })
+    expect(await a).toEqual({ data: { id: '1', done: true } })
+    expect(currentData.value).toEqual([{ id: '1', done: true }, { id: '2', done: true }])
+    second.resolve({ data: { id: '2', done: true } })
+    await b
+    expect(firstSignal.aborted).toBe(false)
+    expect(currentData.value).toEqual([{ id: '1', done: true }, { id: '2', done: true }])
+    expect(client.status.value).toBe('hasSucceeded')
+  })
+
+  it('rolls back only a failing middle mutation, in any completion order', async () => {
+    const responses = [deferred<ActionResult<Task>>(), deferred<ActionResult<Task>>(), deferred<ActionResult<Task>>()]
+    vi.stubGlobal('$fetch', vi.fn().mockReturnValueOnce(responses[0]!.promise).mockReturnValueOnce(responses[1]!.promise).mockReturnValueOnce(responses[2]!.promise))
+    const currentData = ref<Task[]>([{ id: '1', done: false }, { id: '2', done: false }, { id: '3', done: false }])
+    const errors: string[] = []
+    const client = useOptimisticAction(action<Task, Task>(), {
+      currentData, updateFn: toggle, mode: 'merge',
+      onError({ error }) { errors.push(error.serverError!) },
+    })
+    const calls = ['1', '2', '3'].map(id => client.executeAsync({ id, done: true }))
+    responses[2]!.resolve({ data: { id: '3', done: true } })
+    await calls[2]
+    responses[1]!.resolve({ serverError: 'failed' })
+    await calls[1]
+    expect(currentData.value).toEqual([{ id: '1', done: true }, { id: '2', done: false }, { id: '3', done: true }])
+    responses[0]!.resolve({ data: { id: '1', done: true } })
+    await calls[0]
+    expect(currentData.value).toEqual([{ id: '1', done: true }, { id: '2', done: false }, { id: '3', done: true }])
+    // Reactive state and callbacks stay owned by the latest execution, matching useAction.
+    expect(errors).toEqual([])
+    expect(client.status.value).toBe('hasSucceeded')
+  })
+
+  it('rolls back the latest failure before onError and keeps earlier confirmed updates', async () => {
+    const first = deferred<ActionResult<Task>>()
+    const second = deferred<ActionResult<Task>>()
+    vi.stubGlobal('$fetch', vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise))
+    const currentData = ref<Task[]>([{ id: '1', done: false }, { id: '2', done: false }])
+    let seen: Task[] | undefined
+    const client = useOptimisticAction(action<Task, Task>(), {
+      currentData, updateFn: toggle, mode: 'merge',
+      onError() { seen = currentData.value },
+    })
+    const a = client.executeAsync({ id: '1', done: true })
+    const b = client.executeAsync({ id: '2', done: true })
+    second.resolve({ serverError: 'failed' })
+    await b
+    expect(seen).toEqual([{ id: '1', done: true }, { id: '2', done: false }])
+    first.resolve({ data: { id: '1', done: true } })
+    await a
+    expect(currentData.value).toEqual([{ id: '1', done: true }, { id: '2', done: false }])
+  })
+
+  it('cancel aborts and rolls back pending updates but keeps confirmed ones', async () => {
+    const first = deferred<ActionResult<Task>>()
+    const second = deferred<ActionResult<Task>>()
+    const fetch = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    vi.stubGlobal('$fetch', fetch)
+    const currentData = ref<Task[]>([{ id: '1', done: false }, { id: '2', done: false }])
+    const client = useOptimisticAction(action<Task, Task>(), { currentData, updateFn: toggle, mode: 'merge' })
+    const a = client.executeAsync({ id: '1', done: true })
+    const b = client.executeAsync({ id: '2', done: true })
+    second.resolve({ data: { id: '2', done: true } })
+    await b
+    client.cancel()
+    expect((fetch.mock.calls[0]![1].signal as AbortSignal).aborted).toBe(true)
+    expect(currentData.value).toEqual([{ id: '1', done: false }, { id: '2', done: true }])
+    await a
+    first.resolve({ data: { id: '1', done: true } })
+    expect(currentData.value).toEqual([{ id: '1', done: false }, { id: '2', done: true }])
+  })
+
+  it('treats an external write as authoritative and releases pending updates', async () => {
+    const first = deferred<ActionResult<Task>>()
+    const second = deferred<ActionResult<Task>>()
+    vi.stubGlobal('$fetch', vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise))
+    const currentData = ref<Task[]>([{ id: '1', done: false }, { id: '2', done: false }])
+    const client = useOptimisticAction(action<Task, Task>(), { currentData, updateFn: toggle, mode: 'merge' })
+    const a = client.executeAsync({ id: '1', done: true })
+    const b = client.executeAsync({ id: '2', done: true })
+    const authoritative = [{ id: '1', done: true }, { id: '2', done: false }]
+    currentData.value = authoritative
+    first.resolve({ serverError: 'failed' })
+    second.resolve({ serverError: 'failed' })
+    await Promise.all([a, b])
+    expect(toRaw(currentData.value)).toBe(authoritative)
   })
 })

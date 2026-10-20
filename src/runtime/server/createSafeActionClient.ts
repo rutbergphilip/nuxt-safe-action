@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { isError } from 'h3'
 import type { H3Event } from 'h3'
 import type {
   SafeAction,
@@ -12,6 +13,7 @@ import type {
   InferSchemaInput,
   InferSchemaOutput,
   BusinessError,
+  ServerErrorHandler,
 } from '../types'
 import { ActionError, ActionValidationError, DeclaredBusinessFailure } from './errors'
 import { formatValidationErrors, normalizeValidationErrors, validateSchema } from './validation'
@@ -87,7 +89,7 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
   private _outputSchema?: ActionSchema
   private _businessErrors: Readonly<Record<string, string>>
   private _metadata: ActionMetadata
-  private _handleServerError?: (error: Error) => TServerError
+  private _handleServerError?: ServerErrorHandler<TServerError>
 
   constructor(opts: {
     middlewares: MiddlewareFn<any, any>[]
@@ -95,7 +97,7 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
     outputSchema?: ActionSchema
     metadata: ActionMetadata
     businessErrors?: Readonly<Record<string, string>>
-    handleServerError?: (error: Error) => TServerError
+    handleServerError?: ServerErrorHandler<TServerError>
   }) {
     this._middlewares = opts.middlewares
     this._inputSchema = opts.inputSchema
@@ -211,6 +213,14 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
   }
 }
 
+function logUnexpectedError(event: H3Event, error: unknown): void {
+  try {
+    // GET actions carry raw input in the query string; never log it.
+    const pathname = event.path?.split('?', 1)[0]
+    console.error(`[nuxt-safe-action] Unhandled error in ${event.method} ${pathname}:`, error)
+  } catch { /* logging is best effort */ }
+}
+
 async function executeAction<TServerError>(
   rawInput: unknown,
   event: H3Event,
@@ -284,17 +294,25 @@ async function executeAction<TServerError>(
       return { serverError: error.message as TServerError }
     }
 
+    const normalizedError = error instanceof Error ? error : new Error(String(error))
+
     // Unexpected errors — pass through the user's error handler
     if (config.handleServerError) {
       try {
-        const normalizedError = error instanceof Error ? error : new Error(String(error))
-        return { serverError: config.handleServerError(normalizedError) }
-      } catch {
+        return { serverError: config.handleServerError(normalizedError, { event, metadata: config.metadata, clientInput: rawInput }) }
+      } catch (mapperError) {
+        logUnexpectedError(event, mapperError)
         return { serverError: 'An unexpected error occurred' as TServerError }
       }
     }
 
-    // Fallback
+    // Intentional client errors such as createError({ statusCode: 401 }) keep their public message.
+    if (isError(error) && error.statusCode >= 400 && error.statusCode < 500) {
+      return { serverError: (error.statusMessage || error.message || 'Request failed') as TServerError }
+    }
+
+    // Fallback: mask the message for the client but keep a server-side trace.
+    logUnexpectedError(event, normalizedError)
     return { serverError: 'An unexpected error occurred' as TServerError }
   }
 }
@@ -315,10 +333,10 @@ async function executeAction<TServerError>(
  */
 export function createSafeActionClient<TServerError = string>(
   opts: SafeActionClientOpts<TServerError> = {},
-): SafeActionBuilder<Record<string, never>, undefined, undefined, TServerError> {
-  return new SafeActionBuilder<Record<string, never>, undefined, undefined, TServerError>({
+): SafeActionBuilder<Record<string, never>, undefined, unknown, TServerError> {
+  return new SafeActionBuilder<Record<string, never>, undefined, unknown, TServerError>({
     middlewares: [],
     metadata: {},
-    handleServerError: opts.handleServerError as ((error: Error) => TServerError) | undefined,
+    handleServerError: opts.handleServerError,
   })
 }

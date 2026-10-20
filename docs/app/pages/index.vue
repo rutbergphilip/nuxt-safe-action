@@ -120,7 +120,7 @@ const {
       <div class="hero-container">
         <div class="hero-badge">
           <UIcon name="i-lucide-sparkles" class="size-3.5 text-emerald-400" />
-          <span>v{{ version }} &mdash; Advanced forms, typed business errors &amp; query refresh</span>
+          <span>v{{ version }} &mdash; Secure defaults, typed client errors &amp; merged optimistic updates</span>
         </div>
 
         <h1 class="hero-title">

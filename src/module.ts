@@ -33,7 +33,8 @@ export default defineNuxtModule<ModuleOptions>({
     name: 'nuxt-safe-action',
     configKey: 'safeAction',
     compatibility: {
-      nuxt: '>=3.0.0',
+      // addServerImports first shipped in @nuxt/kit 3.8.0.
+      nuxt: '>=3.8.0',
     },
   },
   defaults: {

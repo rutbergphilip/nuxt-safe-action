@@ -10,9 +10,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        nuxt: [3, 4]
+        # 3.8.0 is the declared floor (compatibility.nuxt / @nuxt/kit range); 3 and 4 track the latest releases.
+        nuxt: ['3.8.0', 3, 4]
         zod: [3, 4]
     name: Nuxt ${{ matrix.nuxt }} / Zod ${{ matrix.zod }}
+    env:
+      FLOOR: ${{ matrix.nuxt == '3.8.0' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -21,13 +24,29 @@ jobs:
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
       - name: Install compatibility versions
+        if: env.FLOOR != 'true'
         run: pnpm add -Dw nuxt@^${{ matrix.nuxt }} zod@^${{ matrix.zod }}
-      - run: pnpm dev:prepare
+      - name: Install floor versions
+        if: env.FLOOR == 'true'
+        # Pin @nuxt/kit as well so the module's own newer kit cannot mask APIs missing from the floor.
+        run: |
+          pnpm add -Dw nuxt@${{ matrix.nuxt }} zod@^${{ matrix.zod }}
+          pnpm add -w @nuxt/kit@${{ matrix.nuxt }}
+      - if: env.FLOOR != 'true'
+        run: pnpm dev:prepare
+      - name: Prepare module (floor)
+        if: env.FLOOR == 'true'
+        # The playground pins Nuxt 4, which the floor kit cannot load; the test fixtures use the root Nuxt.
+        run: pnpm exec nuxt-module-build build --stub && pnpm exec nuxt-module-build prepare
       - run: pnpm lint
-      - run: pnpm test:types
+      # Fixture configs set compatibilityDate, which the floor's types reject, so the floor skips type and package checks.
+      - if: env.FLOOR != 'true'
+        run: pnpm test:types
       - run: pnpm test
-      - run: pnpm prepack
-      - run: pnpm test:package
+      - if: env.FLOOR != 'true'
+        run: pnpm prepack
+      - if: env.FLOOR != 'true'
+        run: pnpm test:package
         env:
           SMOKE_NUXT_VERSION: ^${{ matrix.nuxt }}
           SMOKE_ZOD_VERSION: ^${{ matrix.zod }}

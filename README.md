@@ -55,7 +55,7 @@ pnpm add nuxt-safe-action zod
 export default defineNuxtConfig({ modules: ['nuxt-safe-action'] })
 ```
 
-The module requires a Nuxt server deployment for actions. A static-only export cannot execute them. Nuxt 3 and 4 are supported; use the Node version required by your Nuxt release.
+The module requires a Nuxt server deployment for actions. A static-only export cannot execute them. Nuxt 3.8+ and Nuxt 4 are supported; use the Node version required by your Nuxt release.
 
 ```ts
 // server/utils/action-client.ts
@@ -192,7 +192,7 @@ pnpm dev
 pnpm verify
 ```
 
-The verification command runs lint, types, tests, build, packed-install smoke validation, and documentation build. CI covers Nuxt 3/4 with Zod 3/4; validator tests also cover Valibot, ArkType, and Yup. See [contributing](./CONTRIBUTING.md) and [security reporting](./SECURITY.md).
+The verification command runs lint, types, tests, build, packed-install smoke validation, and documentation build. CI covers the Nuxt 3.8.0 floor plus the latest Nuxt 3/4 with Zod 3/4; validator tests also cover Valibot, ArkType, and Yup. See [contributing](./CONTRIBUTING.md) and [security reporting](./SECURITY.md).
 
 ## Inspiration and license
 

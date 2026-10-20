@@ -6,6 +6,6 @@ If private reporting is unavailable, open an issue requesting a private reportin
 
 ## Application responsibilities
 
-Validation and typed calls do not replace authentication, resource authorization, CSRF policy, rate limits, transaction design, or deployment configuration. Every generated action route is an HTTP endpoint. Validate business rules on the server, expose only intentional errors, and return explicit public output fields.
+Validation and typed calls do not replace authentication, resource authorization, rate limits, transaction design, or deployment configuration. Every generated action route is an HTTP endpoint. Non-GET routes reject non-JSON and cross-site requests by default (`safeAction.csrf: 'strict'`); if you set `csrf: 'off'`, you are responsible for CSRF protection. Validate business rules on the server, expose only intentional errors, and return explicit public output fields.
 
 Use a server-side session check and verify ownership for each requested resource. Cancellation cannot undo work already performed by the server. Design idempotency before retrying mutations. Avoid logging raw sensitive inputs or returning unexpected exception details.

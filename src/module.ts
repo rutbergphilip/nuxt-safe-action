@@ -19,6 +19,13 @@ export interface ModuleOptions {
    * @default 'actions'
    */
   actionsDir?: string
+  /**
+   * Same-origin protection for generated action routes. `'strict'` requires JSON
+   * bodies for non-GET actions and rejects cross-site `Sec-Fetch-Site` or a
+   * mismatched `Origin`. `'off'` restores the permissive body parsing of 0.7.
+   * @default 'strict'
+   */
+  csrf?: 'strict' | 'off'
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -31,6 +38,7 @@ export default defineNuxtModule<ModuleOptions>({
   },
   defaults: {
     actionsDir: 'actions',
+    csrf: 'strict',
   },
   setup(options, nuxt) {
     const { resolve } = createResolver(import.meta.url)
@@ -50,6 +58,7 @@ export default defineNuxtModule<ModuleOptions>({
     const actionsDir = options.actionsDir || 'actions'
     const fullActionsDir = resolvePath(nuxt.options.serverDir, actionsDir)
     const actionHandlerPath = resolve('./runtime/server/handler')
+    const handlerOptions = JSON.stringify({ csrf: options.csrf === 'off' ? 'off' : 'strict' })
 
     // Append only after Nitro resolves its default exclusions; configuring exclude
     // earlier would suppress Nitro's .git/build/node_modules defaults.
@@ -85,7 +94,7 @@ export default defineNuxtModule<ModuleOptions>({
 
       for (const action of actionFiles) {
         const virtualKey = `#safe-action-handler/${action.method}/${action.name}`
-        nitroConfig.virtual[virtualKey] = `import { createActionHandler } from ${JSON.stringify(actionHandlerPath)}\nimport action from ${JSON.stringify(action.filePath)}\nexport default createActionHandler(action, ${JSON.stringify(action.method)})\n`
+        nitroConfig.virtual[virtualKey] = `import { createActionHandler } from ${JSON.stringify(actionHandlerPath)}\nimport action from ${JSON.stringify(action.filePath)}\nexport default createActionHandler(action, ${JSON.stringify(action.method)}, ${handlerOptions})\n`
 
         nitroConfig.handlers.push({
           route: `/api/_actions/${action.name}`,

@@ -176,7 +176,10 @@ const { executeAsync, cancel } = useAction(createPost, {
 ```ts
 export default defineNuxtConfig({
   modules: ['nuxt-safe-action'],
-  safeAction: { actionsDir: 'actions' }, // relative to serverDir
+  safeAction: {
+    actionsDir: 'actions', // relative to serverDir
+    csrf: 'strict', // non-GET actions require same-origin JSON; 'off' to opt out
+  },
 })
 ```
 

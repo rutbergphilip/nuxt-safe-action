@@ -1,6 +1,6 @@
 {
   "name": "nuxt-safe-action",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Type-safe Nuxt actions with advanced forms, declared business errors and mutation-driven query refresh",
   "repository": {
     "type": "git",

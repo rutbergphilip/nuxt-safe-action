@@ -219,3 +219,13 @@ describe('unexpected error logging', () => {
     expect(log.mock.calls[0]![0]).toBe('[nuxt-safe-action] Unhandled error in GET /api/_actions/lookup:')
   })
 })
+
+describe('actions without a schema', () => {
+  it('types parsedInput as unknown because it holds raw client input', async () => {
+    const action = createSafeActionClient().action(({ parsedInput }) => {
+      expectTypeOf(parsedInput).toEqualTypeOf<unknown>()
+      return typeof parsedInput
+    })
+    expect(await action._execute({ injected: true }, event)).toEqual({ data: 'object' })
+  })
+})

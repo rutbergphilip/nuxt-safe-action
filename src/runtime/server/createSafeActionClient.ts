@@ -333,8 +333,8 @@ async function executeAction<TServerError>(
  */
 export function createSafeActionClient<TServerError = string>(
   opts: SafeActionClientOpts<TServerError> = {},
-): SafeActionBuilder<Record<string, never>, undefined, undefined, TServerError> {
-  return new SafeActionBuilder<Record<string, never>, undefined, undefined, TServerError>({
+): SafeActionBuilder<Record<string, never>, undefined, unknown, TServerError> {
+  return new SafeActionBuilder<Record<string, never>, undefined, unknown, TServerError>({
     middlewares: [],
     metadata: {},
     handleServerError: opts.handleServerError,

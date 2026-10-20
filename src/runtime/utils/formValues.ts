@@ -8,20 +8,42 @@ function segments(path: string): string[] {
   return parts
 }
 
+function isPlainObject(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+let warnedNonPlain = false
+
 export function cloneFormValue<T>(value: T): T {
   if (value === null || typeof value !== 'object') return value
   const raw = toRaw(value)
   if (raw instanceof Date) return new Date(raw.getTime()) as T
   if (Array.isArray(raw)) return raw.map(cloneFormValue) as T
+  if (!isPlainObject(raw)) {
+    // Files, Maps, class instances and similar values cannot be deep-copied or
+    // sent as JSON. Keep the reference so the UI still works, and say so once.
+    if (!warnedNonPlain) {
+      warnedNonPlain = true
+      try {
+        console.warn(`[nuxt-safe-action] Form values should be plain JSON data; a ${raw.constructor?.name || 'non-plain'} value is kept by reference and will not serialize as expected. File uploads are not supported by useFormAction.`)
+      } catch { /* logging is best effort */ }
+    }
+    return value
+  }
   return Object.fromEntries(Object.entries(raw).map(([key, child]) => [key, cloneFormValue(child)])) as T
 }
 
 export function sameFormValue(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true
   if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
-  const left = toRaw(a)
-  const right = toRaw(b)
+  // Traverse the reactive values themselves (not toRaw) so computed dirty state
+  // tracks nested edits after it has been read once.
+  const left = a
+  const right = b
   if (left instanceof Date || right instanceof Date) return left instanceof Date && right instanceof Date && Object.is(left.getTime(), right.getTime())
+  // Non-plain values (Map, File, class instances) are compared by identity.
+  if ((!Array.isArray(left) && !isPlainObject(toRaw(left))) || (!Array.isArray(right) && !isPlainObject(toRaw(right)))) return toRaw(left) === toRaw(right)
   if (Array.isArray(left) !== Array.isArray(right)) return false
   if (Array.isArray(left) && Array.isArray(right) && left.length !== right.length) return false
   const keys = Object.keys(left)

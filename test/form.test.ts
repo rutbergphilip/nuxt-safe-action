@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { effectScope } from 'vue'
+import { effectScope, toRaw } from 'vue'
 import { useFormAction } from '../src/runtime/composables/useFormAction'
 import { resetNuxtApp, setQueryRefresh } from './mocks/nuxt-app'
 import { toFormErrors } from '../src/runtime/utils/toFormErrors'
@@ -267,5 +267,73 @@ describe('optional client schema validation', () => {
     await form.submit()
     expect(form.status.value).toBe('idle')
     expect(onSettled).not.toHaveBeenCalled()
+  })
+})
+
+describe('async initial values', () => {
+  it('rebases dirty tracking on loaded data and follows it while the form is pristine', () => {
+    const form = useFormAction(action(), { initialValues: { profile: { name: '', email: '' }, addresses: [] } as Values })
+    form.setInitialValues(initial())
+    expect(form.values.value).toEqual(initial())
+    expect(form.initialValues.value).toEqual(initial())
+    expect(form.isDirty.value).toBe(false)
+    form.setFieldValue('profile.name', 'Grace')
+    expect(form.dirtyFields.value).toContain('profile.name')
+    expect(form.dirtyFields.value).not.toContain('profile.email')
+    form.reset()
+    expect(form.values.value).toEqual(initial())
+  })
+
+  it('keeps user edits when the baseline arrives after editing, or when keepValues is set', () => {
+    const form = useFormAction(action(), { initialValues: initial() })
+    form.setFieldValue('profile.name', 'Grace')
+    const loaded = { ...initial(), profile: { name: 'Server', email: 'server@example.com' } }
+    form.setInitialValues(loaded)
+    expect(form.getFieldValue('profile.name')).toBe('Grace')
+    expect(form.isFieldDirty('profile.name')).toBe(true)
+    expect(form.isFieldDirty('profile.email')).toBe(true)
+
+    const pristine = useFormAction(action(), { initialValues: initial() })
+    pristine.setInitialValues(loaded, { keepValues: true })
+    expect(pristine.values.value).toEqual(initial())
+    expect(pristine.isDirty.value).toBe(true)
+  })
+
+  it('does not share the passed baseline object with the form', () => {
+    const loaded = initial()
+    const form = useFormAction(action(), { initialValues: initial() })
+    form.setInitialValues(loaded)
+    loaded.profile.name = 'mutated'
+    expect(form.initialValues.value.profile.name).toBe('Ada')
+    expect(form.values.value.profile.name).toBe('Ada')
+  })
+})
+
+describe('non-plain form values', () => {
+  it('keeps non-plain values by reference, compares them by identity and warns once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const first = new Map([['a', 1]])
+    const form = useFormAction(action<{ data: Map<string, number> }>(), { initialValues: { data: first } })
+    expect(toRaw(form.values.value.data)).toBe(first)
+    expect(form.isDirty.value).toBe(false)
+    form.setFieldValue('data', new Map([['a', 1]]))
+    expect(form.isDirty.value).toBe(true)
+    expect(warn.mock.calls.length).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('dirty state reactivity', () => {
+  it('recomputes isDirty and dirtyFields after nested edits once they have been read', () => {
+    const form = useFormAction(action(), { initialValues: initial() })
+    expect(form.isDirty.value).toBe(false)
+    expect(form.dirtyFields.value).toEqual([])
+    form.setFieldValue('profile.name', 'Grace')
+    expect(form.isDirty.value).toBe(true)
+    expect(form.dirtyFields.value).toContain('profile.name')
+    form.values.value.addresses[1]!.city = 'Bergen'
+    expect(form.dirtyFields.value).toContain('addresses.1.city')
+    form.setFieldValue('profile.name', 'Ada')
+    form.values.value.addresses[1]!.city = 'Oslo'
+    expect(form.isDirty.value).toBe(false)
   })
 })

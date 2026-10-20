@@ -32,7 +32,7 @@ const action = createSafeActionClient()
 
 `useFormAction` adds typed field getters/setters, dirty/touched tracking, and optional client validation while preserving raw submission snapshots and newer edits. `toFormErrors()` adapts dotted errors to `{ name, message }` UI messages, keeping root errors separate.
 
-Register an ordinary `useAsyncData` key with `useActionQueryTags(key, ['profiles'])`, then use `invalidate: { keys, tags }` on a mutation. Successful latest executions refresh matching Nuxt keys; failures, stale requests, and cancellation do not. Refresh errors stay separate from successful writes. Nuxt continues to own caching and hydration.
+Read data with `await useActionQuery(getProject, () => ({ id: id.value }), { tags: ['projects'] })`: typed `data` and errors, SSR hydration, a Nuxt data key per input, and the session cookie forwarded during SSR. For your own `useAsyncData` keys, register tags with `useActionQueryTags(key, ['profiles'])`. Then use `invalidate: { keys, tags }` on a mutation. Successful latest executions refresh matching Nuxt keys; failures, stale requests, and cancellation do not. Refresh errors stay separate from successful writes. Nuxt continues to own caching and hydration.
 
 [Advanced runnable profile form](./example) · [Forms](https://nuxt-safe-action.vercel.app/guide/forms) · [Business errors](https://nuxt-safe-action.vercel.app/guide/error-handling) · [Query refresh](https://nuxt-safe-action.vercel.app/guide/queries)
 
@@ -122,9 +122,9 @@ const { values, submit, data, fieldErrors, rootErrors, serverError, isExecuting 
 |---|---|---|
 | Nuxt `$fetch` / `useFetch` | Ordinary Nitro routes; choose your validation/error contract | Direct HTTP APIs or existing endpoints |
 | `nuxt-safe-action` | Dedicated action directory, typed builder, consistent result envelope | Validated forms and mutations with explicit middleware |
-| [`nuxt-actions`](https://billymaulana.github.io/nuxt-actions/) | Broader action toolkit with query/cache, streaming, uploads, OpenAPI, and other tooling | Applications wanting those built-in abstractions |
+| [`nuxt-actions`](https://billymaulana.github.io/nuxt-actions/) | Broader action toolkit with infinite queries, streaming, uploads, OpenAPI, and other tooling | Applications wanting those built-in abstractions |
 
-Both action libraries offer schema validation, typed middleware, output validation, and optimistic updates. This module concentrates on the form and mutation path and composes with Nuxt's existing query tools. No speed, bundle-size, or security superiority is implied. See the [comparison guide](https://nuxt-safe-action.vercel.app/guide/comparison).
+Both action libraries offer schema validation, typed middleware, output validation, and optimistic updates. This module concentrates on forms, mutations and typed reads built on Nuxt's own data layer. No speed, bundle-size, or security superiority is implied. See the [comparison guide](https://nuxt-safe-action.vercel.app/guide/comparison).
 
 ## API essentials
 
@@ -168,7 +168,7 @@ const { executeAsync, cancel } = useAction(createPost, {
 - [HTML forms and Nuxt UI nested field errors](https://nuxt-safe-action.vercel.app/guide/forms)
 - [Authentication, ownership, and output allowlists](https://nuxt-safe-action.vercel.app/guide/authentication)
 - [Optimistic updates and rollback](https://nuxt-safe-action.vercel.app/guide/optimistic-updates)
-- [GET actions with Nuxt `useAsyncData`](https://nuxt-safe-action.vercel.app/guide/queries)
+- [Queries with `useActionQuery`](https://nuxt-safe-action.vercel.app/guide/queries)
 - [Validator choice, transforms, and async refinements](https://nuxt-safe-action.vercel.app/guide/validation)
 
 ## Configuration

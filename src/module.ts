@@ -8,6 +8,7 @@ import {
   addImports,
   addServerImports,
   addTemplate,
+  getNuxtVersion,
   useLogger,
 } from '@nuxt/kit'
 
@@ -54,6 +55,10 @@ export default defineNuxtModule<ModuleOptions>({
       { name: 'returnValidationErrors', from: resolve('./runtime/server/errors') },
     ])
 
+    // Older Vite alias resolution takes the first prefix match, so the more specific
+    // '#safe-action/*' aliases must be registered before '#safe-action' itself.
+    nuxt.options.alias['#safe-action/actions'] = join(nuxt.options.buildDir, 'safe-action/actions')
+    nuxt.options.alias['#safe-action/config'] = join(nuxt.options.buildDir, 'safe-action/config.mjs')
     nuxt.options.alias['#safe-action'] = resolve('./runtime/server/index')
 
     const actionsDir = options.actionsDir || 'actions'
@@ -105,6 +110,20 @@ export default defineNuxtModule<ModuleOptions>({
       }
     })
 
+    // Reactive useAsyncData keys (and handler abort signals) shipped in Nuxt 3.17.
+    const [major = 0, minor = 0] = getNuxtVersion(nuxt).split('.').map(part => Number.parseInt(part, 10))
+    const reactiveKeys = major > 3 || (major === 3 && minor >= 17)
+    addTemplate({
+      filename: 'safe-action/config.mjs',
+      write: true,
+      getContents: () => `export const reactiveAsyncDataKeys = ${reactiveKeys}\n`,
+    })
+    addTemplate({
+      filename: 'safe-action/config.d.mts',
+      write: true,
+      getContents: () => 'export declare const reactiveAsyncDataKeys: boolean\n',
+    })
+
     addTemplate({
       filename: 'safe-action/actions.ts',
       write: true,
@@ -125,11 +144,10 @@ export default defineNuxtModule<ModuleOptions>({
       tsConfig.compilerOptions = tsConfig.compilerOptions || {}
       tsConfig.compilerOptions.paths = tsConfig.compilerOptions.paths || {}
       tsConfig.compilerOptions.paths['#safe-action/actions'] = ['./safe-action/actions']
+      tsConfig.compilerOptions.paths['#safe-action/config'] = ['./safe-action/config.mjs']
       tsConfig.compilerOptions.paths['#safe-action'] = [
         resolve('./runtime/server/index').replace(/\.ts$/, ''),
       ]
     })
-
-    nuxt.options.alias['#safe-action/actions'] = join(nuxt.options.buildDir, 'safe-action/actions')
   },
 })

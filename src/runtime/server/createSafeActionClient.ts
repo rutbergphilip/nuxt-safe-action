@@ -215,7 +215,9 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
 
 function logUnexpectedError(event: H3Event, error: unknown): void {
   try {
-    console.error(`[nuxt-safe-action] Unhandled error in ${event.method} ${event.path}:`, error)
+    // GET actions carry raw input in the query string; never log it.
+    const pathname = event.path?.split('?', 1)[0]
+    console.error(`[nuxt-safe-action] Unhandled error in ${event.method} ${pathname}:`, error)
   } catch { /* logging is best effort */ }
 }
 

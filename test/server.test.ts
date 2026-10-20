@@ -208,3 +208,14 @@ describe('unexpected error observability', () => {
     expect(log).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('unexpected error logging', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('does not log the query string, which carries GET action input', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const getEvent = { method: 'GET', path: '/api/_actions/lookup?input=%7B%22ssn%22%3A%22secret%22%7D' } as H3Event
+    await createSafeActionClient().action(() => { throw new Error('db down') })._execute({ ssn: 'secret' }, getEvent)
+    expect(log.mock.calls[0]![0]).toBe('[nuxt-safe-action] Unhandled error in GET /api/_actions/lookup:')
+  })
+})

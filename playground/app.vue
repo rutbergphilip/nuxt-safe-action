@@ -4,6 +4,7 @@
     <p>Demonstration data only; posts and profiles are not persisted.</p>
     <ProfileForm />
     <OptimisticTasks />
+    <UserQuery />
 
     <!-- Greet Action -->
     <section style="margin-top: 2rem">
@@ -132,6 +133,7 @@
 <script setup lang="ts">
 import ProfileForm from './components/ProfileForm.vue'
 import OptimisticTasks from './components/OptimisticTasks.vue'
+import UserQuery from './components/UserQuery.vue'
 import { greet, getUser, createPost } from '#safe-action/actions'
 
 const greetName = ref('')

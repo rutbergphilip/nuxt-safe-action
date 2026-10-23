@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "name": "query",
+  "type": "module",
+  "dependencies": {
+    "zod": "^3.24.0"
+  }
+}

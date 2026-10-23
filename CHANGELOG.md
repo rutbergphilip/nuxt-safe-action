@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- `useActionQuery(action, input?, options?)` loads an action through Nuxt's `useAsyncData`. It returns typed `data`, `businessError`, `validationErrors`, `serverError` and `clientError`, with a status that reports error envelopes as `'error'`. Each input gets its own data key (reactive on Nuxt 3.17+, aborting superseded requests; fixed key with refetch on 3.8–3.16). During SSR only allowlisted request headers are forwarded (default `cookie`). `tags` plug into `useAction({ invalidate: { tags } })`.
+
+### Fixes
+
+- On Nuxt versions whose Vite takes the first prefix match (such as 3.8), importing `#safe-action/actions` from app code resolved into the server runtime and failed to build. The specific `#safe-action/*` aliases are now registered before `#safe-action`.
+
 ## v0.8.0
 
 ### Breaking changes

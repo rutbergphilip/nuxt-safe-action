@@ -123,24 +123,30 @@ export interface SafeActionReference<TInput = unknown, TOutput = unknown, TServe
   }
 }
 
-export interface MiddlewareArgs<TCtx> {
+export interface MiddlewareArgs<TCtx, TBusinessError = never> {
   ctx: TCtx
   clientInput: unknown
   metadata: ActionMetadata
   event: H3Event
   next: <TNewCtx>(opts: { ctx: TNewCtx }) => Promise<MiddlewareResult<TNewCtx>>
+  /**
+   * Stop with a business error declared by `.errors()` before this `.use()`.
+   * Write `return fail(code)`: TypeScript does not narrow after a call to a destructured `never` function.
+   */
+  fail: BusinessErrorFn<unknown, TBusinessError>
 }
 
 export interface MiddlewareResult<TCtx> {
   ctx: TCtx
 }
 
-export type MiddlewareFn<TCtxIn = Record<string, unknown>, TCtxOut = TCtxIn> = (
-  args: MiddlewareArgs<TCtxIn>,
+export type MiddlewareFn<TCtxIn = Record<string, unknown>, TCtxOut = TCtxIn, TBusinessError = never> = (
+  args: MiddlewareArgs<TCtxIn, TBusinessError>,
 ) => Promise<MiddlewareResult<TCtxOut>>
 
 export interface ActionHandlerArgs<TCtx, TInput, TBusinessError = never, TErrorInput = TInput> {
   parsedInput: TInput
+  /** Write `return fail(code)`: TypeScript does not narrow after a call to a destructured `never` function. */
   fail?: BusinessErrorFn<TErrorInput, TBusinessError>
   ctx: TCtx
   event: H3Event
@@ -168,7 +174,7 @@ export interface SafeActionClientOpts<TServerError = string> {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface ActionConfig<TServerError = string> {
-  middlewares: MiddlewareFn<any, any>[]
+  middlewares: MiddlewareFn<any, any, any>[]
   inputSchema?: ActionSchema
   outputSchema?: ActionSchema
   metadata: ActionMetadata

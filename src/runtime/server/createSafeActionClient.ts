@@ -19,11 +19,12 @@ import { ActionError, ActionValidationError, DeclaredBusinessFailure } from './e
 import { formatValidationErrors, normalizeValidationErrors, validateSchema } from './validation'
 
 async function executeMiddlewareChain<TServerError>(
-  middlewares: MiddlewareFn<any, any>[],
+  middlewares: MiddlewareFn<any, any, any>[],
   initialCtx: Record<string, unknown>,
   clientInput: unknown,
   metadata: ActionMetadata,
   event: H3Event,
+  fail: (code: string, options?: { validationErrors?: Record<string, readonly string[] | undefined> }) => never,
   innerFn: (ctx: any) => Promise<ActionResult<any, TServerError, unknown>>,
 ): Promise<ActionResult<any, TServerError, unknown>> {
   // Build the chain from inside-out
@@ -43,6 +44,7 @@ async function executeMiddlewareChain<TServerError>(
           clientInput,
           metadata,
           event,
+          fail,
           next: ({ ctx: newCtx }) => {
             if (!middlewareOpen) {
               const rejected = Promise.reject(new Error('Middleware cannot call next() after it has settled.'))
@@ -84,7 +86,7 @@ async function executeMiddlewareChain<TServerError>(
 }
 
 class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema extends ActionSchema | undefined = undefined, TBusinessError = never> {
-  private _middlewares: MiddlewareFn<any, any>[]
+  private _middlewares: MiddlewareFn<any, any, any>[]
   private _inputSchema?: ActionSchema
   private _outputSchema?: ActionSchema
   private _businessErrors: Readonly<Record<string, string>>
@@ -92,7 +94,7 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
   private _handleServerError?: ServerErrorHandler<TServerError>
 
   constructor(opts: {
-    middlewares: MiddlewareFn<any, any>[]
+    middlewares: MiddlewareFn<any, any, any>[]
     inputSchema?: ActionSchema
     outputSchema?: ActionSchema
     metadata: ActionMetadata
@@ -144,10 +146,10 @@ class SafeActionBuilder<TCtx, TInput, TParsedInput, TServerError, TOutputSchema 
    * Middleware runs in order, and each can extend the context.
    */
   use<TNewCtx>(
-    middleware: MiddlewareFn<TCtx, TNewCtx>,
+    middleware: MiddlewareFn<TCtx, TNewCtx, TBusinessError>,
   ): SafeActionBuilder<TNewCtx, TInput, TParsedInput, TServerError, TOutputSchema, TBusinessError> {
     return new SafeActionBuilder<TNewCtx, TInput, TParsedInput, TServerError, TOutputSchema, TBusinessError>({
-      middlewares: [...this._middlewares, middleware as MiddlewareFn<any, any>],
+      middlewares: [...this._middlewares, middleware as MiddlewareFn<any, any, any>],
       inputSchema: this._inputSchema,
       outputSchema: this._outputSchema,
       metadata: this._metadata,
@@ -227,6 +229,16 @@ async function executeAction<TServerError>(
   config: ActionConfig<TServerError>,
 ): Promise<ActionResult<any, TServerError, unknown>> {
   const businessErrors = config.businessErrors || Object.freeze(Object.create(null)) as Readonly<Record<string, string>>
+  // Middleware and handler share one helper bound to this action's final declarations.
+  const fail = (code: unknown, options?: { validationErrors?: Record<string, readonly string[] | undefined> }): never => {
+    if (typeof code !== 'string' || !Object.hasOwn(businessErrors, code)) {
+      throw new Error('Undeclared business error code.')
+    }
+    const validationErrors = options?.validationErrors === undefined
+      ? undefined
+      : normalizeValidationErrors(options.validationErrors)
+    throw new DeclaredBusinessFailure(code, businessErrors, validationErrors)
+  }
   try {
     return await executeMiddlewareChain(
       config.middlewares,
@@ -234,6 +246,7 @@ async function executeAction<TServerError>(
       rawInput,
       config.metadata,
       event,
+      fail,
       async (ctx) => {
         // 1. Validate input
         let parsedInput = rawInput
@@ -248,15 +261,7 @@ async function executeAction<TServerError>(
         // 2. Run handler
         const data = await config.handler({
           parsedInput,
-          fail: (code, options) => {
-            if (typeof code !== 'string' || !Object.hasOwn(businessErrors, code)) {
-              throw new Error('Undeclared business error code.')
-            }
-            const validationErrors = options?.validationErrors === undefined
-              ? undefined
-              : normalizeValidationErrors(options.validationErrors)
-            throw new DeclaredBusinessFailure(code, businessErrors, validationErrors)
-          },
+          fail,
           ctx,
           event,
         })

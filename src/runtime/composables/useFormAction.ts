@@ -11,6 +11,11 @@ export type UseFormActionOptions<TInput, TOutput, TServerError = string, TBusine
   initialValues: TInput
   /** Validate before submission; parsed output is discarded so the server receives raw input. */
   clientSchema?: StandardSchemaV1<TInput, unknown>
+  /**
+   * After a successful submission, make the submitted snapshot the new initial
+   * values so `isDirty` clears. Edits made while the request was pending stay dirty.
+   */
+  rebaseOnSuccess?: boolean
 }
 
 /** Typed form values remain editable; validation and requests operate on raw snapshots. */
@@ -33,6 +38,8 @@ export function useFormAction<TInput, TOutput, TServerError = string, TBusinessE
   let validationGeneration = 0
   let requestGeneration = 0
   let nextSubmissionTopology: Map<string, unknown[]> | undefined
+  // Submission whose onSuccess/onError was delivered; its onSettled follows even if those callbacks reset the form.
+  let deliveredInput: TInput | undefined
 
   function notify(callback: (() => unknown) | undefined): void {
     if (!callback) return
@@ -58,16 +65,21 @@ export function useFormAction<TInput, TOutput, TServerError = string, TBusinessE
     },
     onSuccess(args) {
       if (requestGeneration !== formGeneration) return
+      deliveredInput = args.input
       serverErrors.value = {}
+      if (options.rebaseOnSuccess) setInitialValues(args.input)
       return options.onSuccess?.(args)
     },
     onError(args) {
       if (requestGeneration !== formGeneration) return
+      deliveredInput = args.input
       serverErrors.value = args.error.validationErrors || {}
       return options.onError?.(args)
     },
     onSettled(args) {
-      if (requestGeneration === formGeneration) return options.onSettled?.(args)
+      if (deliveredInput !== args.input) return
+      deliveredInput = undefined
+      return options.onSettled?.(args)
     },
   })
 
@@ -93,17 +105,17 @@ export function useFormAction<TInput, TOutput, TServerError = string, TBusinessE
   const isTouched = computed(() => touched.value.length > 0)
   const status = computed(() => localStatus.value || execution.status.value)
 
-  function getFieldValue<P extends string>(path: P & FieldPath<TInput>): FieldPathValue<TInput, P> | undefined { return getFormValue(values.value, path) as FieldPathValue<TInput, P> | undefined }
-  function setFieldValue<P extends string>(path: P & FieldPath<TInput>, value: FieldPathValue<TInput, P>): void { setFormValue(values.value, path, value) }
-  function getFieldErrors<P extends string>(path: P & FieldPath<TInput>): readonly string[] { return fieldErrors.value[path] || [] }
-  function isFieldDirty<P extends string>(path: P & FieldPath<TInput>): boolean { return !sameFormValue(getFormValue(values.value, path), getFormValue(initialValues.value, path)) }
-  function isFieldTouched<P extends string>(path: P & FieldPath<TInput>): boolean { return touched.value.includes(path) }
-  function setTouched<P extends string>(path: P & FieldPath<TInput>, touch = true): void {
+  function getFieldValue<P extends FieldPath<TInput>>(path: P): FieldPathValue<TInput, P> | undefined { return getFormValue(values.value, path) as FieldPathValue<TInput, P> | undefined }
+  function setFieldValue<P extends FieldPath<TInput>>(path: P, value: FieldPathValue<TInput, P>): void { setFormValue(values.value, path, value) }
+  function getFieldErrors<P extends FieldPath<TInput>>(path: P): readonly string[] { return fieldErrors.value[path] || [] }
+  function isFieldDirty<P extends FieldPath<TInput>>(path: P): boolean { return !sameFormValue(getFormValue(values.value, path), getFormValue(initialValues.value, path)) }
+  function isFieldTouched<P extends FieldPath<TInput>>(path: P): boolean { return touched.value.includes(path) }
+  function setTouched<P extends FieldPath<TInput>>(path: P, touch = true): void {
     // Validate paths even though touching itself never writes into form values.
     getFormValue(values.value, path)
     touched.value = touch ? [...new Set([...touched.value, path])] : touched.value.filter(item => item !== path)
   }
-  function clearErrors<P extends string>(path?: P & FieldPath<TInput>): void {
+  function clearErrors<P extends FieldPath<TInput>>(path?: P): void {
     const cleared = (errors: ValidationErrors) => Object.fromEntries(Object.entries(errors).filter(([key]) => path !== undefined && key !== path && !key.startsWith(`${path}.`)))
     clientErrors.value = cleared(clientErrors.value)
     serverErrors.value = cleared(serverErrors.value)

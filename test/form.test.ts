@@ -337,3 +337,92 @@ describe('dirty state reactivity', () => {
     expect(form.isDirty.value).toBe(false)
   })
 })
+
+describe('after a successful save', () => {
+  it('rebaseOnSuccess clears isDirty with the submitted snapshot and keeps edits made while pending', async () => {
+    const response = deferred<ActionResult<string>>()
+    vi.stubGlobal('$fetch', vi.fn().mockReturnValue(response.promise))
+    const form = useFormAction(action(), { initialValues: initial(), rebaseOnSuccess: true })
+    form.setFieldValue('profile.name', 'Grace')
+    form.setFieldValue('profile.email', 'grace@example.com')
+    const pending = form.submit()
+    form.setFieldValue('profile.email', 'edited@example.com')
+    response.resolve({ data: 'saved' })
+    await pending
+    expect(form.initialValues.value.profile.name).toBe('Grace')
+    expect(form.isFieldDirty('profile.name')).toBe(false)
+    expect(form.isFieldDirty('profile.email')).toBe(true)
+    form.setFieldValue('profile.email', 'grace@example.com')
+    expect(form.isDirty.value).toBe(false)
+  })
+
+  it('does not rebase on failed submissions', async () => {
+    vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({ serverError: 'Nope' }))
+    const form = useFormAction(action(), { initialValues: initial(), rebaseOnSuccess: true })
+    form.setFieldValue('profile.name', 'Grace')
+    await form.submit()
+    expect(form.isDirty.value).toBe(true)
+    expect(form.initialValues.value).toEqual(initial())
+  })
+
+  it('setInitialValues(input) from onSuccess clears isDirty', async () => {
+    vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({ data: 'saved' }))
+    let rebase: (values: Values) => void = () => {}
+    const form = useFormAction(action(), { initialValues: initial(), onSuccess: ({ input }) => rebase(input) })
+    rebase = form.setInitialValues
+    form.setFieldValue('profile.name', 'Grace')
+    await form.submit()
+    expect(form.isDirty.value).toBe(false)
+    expect(form.values.value.profile.name).toBe('Grace')
+  })
+
+  it('reset() inside onSuccess still refreshes and settles that submission', async () => {
+    vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({ data: 'saved' }))
+    const refresh = vi.fn()
+    setQueryRefresh(refresh)
+    const onSettled = vi.fn()
+    let reset = () => {}
+    const form = useFormAction(action(), { initialValues: initial(), rebaseOnSuccess: true, invalidate: { keys: ['profile'] }, onSuccess: () => reset(), onSettled })
+    reset = form.reset
+    form.setFieldValue('profile.name', 'Grace')
+    expect(await form.submit()).toEqual({ data: 'saved' })
+    expect(refresh).toHaveBeenCalledExactlyOnceWith(['profile'])
+    expect(onSettled).toHaveBeenCalledTimes(1)
+    expect(form.status.value).toBe('idle')
+    expect(form.values.value.profile.name).toBe('Grace')
+    expect(form.isDirty.value).toBe(false)
+  })
+
+  it('does not settle a submission superseded before it delivered', async () => {
+    const first = deferred<ActionResult<string>>()
+    vi.stubGlobal('$fetch', vi.fn().mockReturnValueOnce(first.promise).mockResolvedValueOnce({ data: 'second' }))
+    const onSettled = vi.fn()
+    const form = useFormAction(action(), { initialValues: initial(), onSettled })
+    const a = form.submit()
+    await form.submit()
+    first.resolve({ data: 'first' })
+    await a
+    expect(onSettled).toHaveBeenCalledExactlyOnceWith({ result: { data: 'second' }, input: initial() })
+  })
+})
+
+describe('field path inference', () => {
+  it('infers setFieldValue values without explicit generics, including single-path inputs', () => {
+    // With one possible path, `P & FieldPath<TInput>` inferred P as string and typed the value as never.
+    const rename = useFormAction(action<{ title: string }>(), { initialValues: { title: '' } })
+    rename.setFieldValue('title', 'Note')
+    expectTypeOf(rename.getFieldValue('title')).toEqualTypeOf<string | undefined>()
+    expect(rename.isFieldDirty('title')).toBe(true)
+    type Note = { title: string; meta: { pinned: boolean } | null } | undefined
+    const form = useFormAction(action<Note>(), { initialValues: { title: '', meta: { pinned: false } } as Note })
+    form.setFieldValue('meta.pinned', true)
+    expect(form.getFieldValue('meta.pinned')).toBe(true)
+    function typeChecks() {
+      // @ts-expect-error value type follows the path
+      rename.setFieldValue('title', 1)
+      // @ts-expect-error unknown paths are rejected
+      rename.setFieldValue('missing', 'x')
+    }
+    void typeChecks
+  })
+})

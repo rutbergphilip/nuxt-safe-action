@@ -70,7 +70,7 @@ describe('useAction request ownership', () => {
     expect(log).toHaveBeenCalledTimes(2)
   })
 
-  it('suppresses old settlement when a completion callback resets or starts a newer execution', async () => {
+  it('settles a delivered run even when its completion callback resets or starts a newer execution', async () => {
     const next = deferred<ActionResult<string>>()
     vi.stubGlobal('$fetch', vi.fn().mockResolvedValueOnce({ data: 'first' }).mockReturnValueOnce(next.promise))
     const settled = vi.fn()
@@ -84,11 +84,12 @@ describe('useAction request ownership', () => {
     })
     await client.executeAsync({ name: 'first' })
     expect(client.status.value).toBe('executing')
-    expect(settled).not.toHaveBeenCalled()
+    expect(settled).toHaveBeenCalledExactlyOnceWith({ result: { data: 'first' }, input: { name: 'first' } })
     next.resolve({ data: 'next' })
     await pending
     expect(client.status.value).toBe('idle')
-    expect(settled).not.toHaveBeenCalled()
+    expect(settled).toHaveBeenCalledTimes(2)
+    expect(settled).toHaveBeenLastCalledWith({ result: { data: 'next' }, input: { name: 'next' } })
   })
 
   it('does not convert throwing error or settled callbacks into a second outcome', async () => {

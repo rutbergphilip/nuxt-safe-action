@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.8.1
+
+First npm release of the 0.8 line: v0.8.0 was tagged but not published to npm, so upgrading from 0.7 also applies the v0.8.0 changes below.
+
+### Behavior changes
+
+- **A run that delivered `onSuccess`/`onError` now always finishes its lifecycle.** Calling `reset()` or starting another execution from those callbacks clears reactive state but no longer cancels that run's `invalidate` refresh or `onSettled`. Previously `onSuccess() { reset() }` silently skipped both. Stale runs and runs cancelled before their response still deliver nothing.
+
+### Features
+
+- Middleware receives `fail()` for business errors declared by `.errors()` earlier in the chain, so shared auth clients can return typed codes such as `UNAUTHORIZED` instead of a `serverError` string.
+- `useFormAction({ rebaseOnSuccess: true })` makes the submitted snapshot the new initial values after a successful submission, clearing `isDirty`.
+- Public `nuxt-safe-action/server` entry exports the server API, including `createActionHandler`, for running actions in tests outside Nuxt.
+
+### Fixes
+
+- `h3` is now a declared dependency. The server runtime imports it, which failed under strict pnpm installs.
+- `setFieldValue`, `getFieldValue` and the other path helpers infer the value type without an explicit generic. With a single possible path, such as a one-field form, the value was typed `never`.
+
+### Documentation
+
+- Use `return fail(...)`: TypeScript does not narrow after calling a destructured `never` function.
+- Mark version-specific features, document typed `serverError` limits, and add a testing guide.
+
 ## v0.8.0
 
 ### Breaking changes

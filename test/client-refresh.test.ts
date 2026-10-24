@@ -138,20 +138,49 @@ describe('success-only query refresh', () => {
     expect(client.refreshError.value).toBeNull()
   })
 
-  it('suppresses stale and reentrantly reset refresh starts', async () => {
+  it('suppresses refresh for stale completions but keeps it when onSuccess resets', async () => {
     const old = deferred<ActionResult<string>>()
     const latest = deferred<ActionResult<string>>()
     vi.stubGlobal('$fetch', vi.fn().mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise))
     const refresh = vi.fn()
     setQueryRefresh(refresh)
-    const client = useAction(action(), { invalidate: { keys: ['users'] }, onSuccess() { client.reset() } })
+    const onSettled = vi.fn()
+    const client = useAction(action(), { invalidate: { keys: ['users'] }, onSuccess() { client.reset() }, onSettled })
     const a = client.executeAsync('old')
     const b = client.executeAsync('latest')
     old.resolve({ data: 'old' })
     await a
+    expect(refresh).not.toHaveBeenCalled()
     latest.resolve({ data: 'latest' })
     await b
-    expect(refresh).not.toHaveBeenCalled()
+    expect(refresh).toHaveBeenCalledExactlyOnceWith(['users'])
+    expect(onSettled).toHaveBeenCalledExactlyOnceWith({ result: { data: 'latest' }, input: 'latest' })
+    expect(client.status.value).toBe('idle')
+    expect(client.data.value).toBeUndefined()
+    expect(client.isRefreshing.value).toBe(false)
+  })
+
+  it('reset() inside onSuccess does not cancel the declared tag refresh or onSettled', async () => {
+    vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({ data: 'saved' }))
+    const pendingRefresh = deferred<undefined>()
+    const refresh = vi.fn().mockReturnValue(pendingRefresh.promise)
+    setQueryRefresh(refresh)
+    const stop = useActionQueryTags('notes', ['notes'])
+    const order: string[] = []
+    const client = useAction(action(), {
+      invalidate: { tags: ['notes'] },
+      onSuccess() { order.push('success'); client.reset() },
+      onSettled() { order.push('settled') },
+    })
+    const pending = client.executeAsync('x')
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledExactlyOnceWith(['notes']))
+    // Reset released reactive state; the background refresh does not reclaim it.
+    expect(client.isRefreshing.value).toBe(false)
+    pendingRefresh.reject(new Error('Refresh failed'))
+    expect(await pending).toEqual({ data: 'saved' })
+    expect(client.refreshError.value).toBeNull()
+    expect(order).toEqual(['success', 'settled'])
+    stop()
   })
 
   it('does not let a cancelled refresh failure overwrite a newer success', async () => {

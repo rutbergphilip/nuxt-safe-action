@@ -62,6 +62,24 @@ try {
   const publicTypes = readFileSync(join(folder, 'node_modules/nuxt-safe-action/dist/runtime/types.d.ts'), 'utf8')
   assert.doesNotMatch(publicTypes, /(?:from\s*['"]zod|import\(['"]zod)/)
   console.log('Yup-only direct consumer dependencies; module runtime/types do not require Zod.')
+  // The runtime imports h3; strict installs only link declared dependencies.
+  assert.ok(installedPackage.dependencies?.h3, 'h3 must be a declared runtime dependency')
+  assert.ok(readFileSync(join(folder, 'node_modules/nuxt-safe-action/dist/runtime/server/index.d.ts'), 'utf8').includes('createActionHandler'))
+  // The public server entry runs outside Nuxt, e.g. in Vitest, without aliasing into dist.
+  writeFileSync(join(folder, 'server-entry.mjs'), `import assert from 'node:assert/strict'
+import { createApp, toWebHandler } from 'h3'
+import { createSafeActionClient, createActionHandler, ActionError } from 'nuxt-safe-action/server'
+const action = createSafeActionClient()
+  .errors({ UNAUTHORIZED: 'Sign in' })
+  .use(async ({ clientInput, next, fail }) => clientInput?.token === 'ok' ? next({ ctx: { user: 'u1' } }) : fail('UNAUTHORIZED'))
+  .action(({ ctx }) => { if (!ctx.user) throw new ActionError('unreachable'); return ctx.user })
+const handle = toWebHandler(createApp().use(createActionHandler(action, 'post')))
+const call = async body => (await handle(new Request('http://localhost/', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))).json()
+assert.deepEqual(await call({ token: 'ok' }), { data: 'u1' })
+assert.deepEqual(await call({}), { businessError: { code: 'UNAUTHORIZED', message: 'Sign in' } })
+`)
+  run('node', ['server-entry.mjs'])
+  console.log('Public nuxt-safe-action/server entry executes actions outside Nuxt.')
   run('npx', ['nuxt', 'prepare'])
   run('npx', ['vue-tsc', '--noEmit'])
   const references = readFileSync(join(folder, '.generated/safe-action/actions.ts'), 'utf8')

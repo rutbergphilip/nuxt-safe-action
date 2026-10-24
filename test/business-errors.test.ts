@@ -146,3 +146,57 @@ describe('shared path and legacy structural types', () => {
     expect(config.businessErrors).toBeUndefined()
   })
 })
+
+describe('business failures from middleware', () => {
+  const authClient = createSafeActionClient()
+    .errors({ UNAUTHORIZED: 'Sign in to continue' })
+    .use(async ({ next, clientInput, fail }) => {
+      const user = (clientInput as { token?: string } | undefined)?.token === 'valid' ? { id: 'u1' } : undefined
+      if (!user) return fail('UNAUTHORIZED')
+      return next({ ctx: { user } })
+    })
+
+  it('returns a declared code from an auth middleware before the handler runs', async () => {
+    const handler = vi.fn(({ ctx }: { ctx: { user: { id: string } } }) => ctx.user.id)
+    const action = authClient.action(handler)
+    expectTypeOf<InferSafeActionBusinessError<typeof action>>().toEqualTypeOf<BusinessError<'UNAUTHORIZED'>>()
+    expect(await action._execute({}, event)).toEqual({ businessError: { code: 'UNAUTHORIZED', message: 'Sign in to continue' } })
+    expect(handler).not.toHaveBeenCalled()
+    expect(await action._execute({ token: 'valid' }, event)).toEqual({ data: 'u1' })
+  })
+
+  it('keeps middleware codes in layered clients and adds action-level codes', async () => {
+    const admin = authClient
+      .errors({ FORBIDDEN: 'Admins only' })
+      .use(async ({ next, ctx, fail }) => {
+        // @ts-expect-error codes are limited to those declared before this middleware
+        if (ctx.user.id === '__typing_only__') fail('NOT_FOUND')
+        if (ctx.user.id !== 'admin') return fail('FORBIDDEN')
+        return next({ ctx })
+      })
+    const action = admin.errors({ NOT_FOUND: 'Missing' }).action(({ fail }) => fail('NOT_FOUND'))
+    expectTypeOf<InferSafeActionBusinessError<typeof action>>().toEqualTypeOf<BusinessError<'UNAUTHORIZED'> | BusinessError<'FORBIDDEN'> | BusinessError<'NOT_FOUND'>>()
+    expect(await action._execute({}, event)).toEqual({ businessError: { code: 'UNAUTHORIZED', message: 'Sign in to continue' } })
+    expect(await action._execute({ token: 'valid' }, event)).toEqual({ businessError: { code: 'FORBIDDEN', message: 'Admins only' } })
+  })
+
+  it('passes field errors from middleware and rejects undeclared codes as unexpected errors', async () => {
+    const withFields = createSafeActionClient()
+      .errors({ LOCKED: 'Record is locked' })
+      .use(async ({ fail }) => fail('LOCKED', { validationErrors: { _root: ['Try again later'] } }))
+      .action(() => 'unreachable')
+    expect(await withFields._execute(undefined, event)).toEqual({ businessError: { code: 'LOCKED', message: 'Record is locked' }, validationErrors: { _root: ['Try again later'] } })
+
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const undeclared = createSafeActionClient()
+      .use(async ({ fail }) => {
+        // @ts-expect-error no codes are declared before this middleware
+        fail('ANY')
+        return { ctx: {} }
+      })
+      .action(() => 'unreachable')
+    expect(await undeclared._execute(undefined, { method: 'POST', path: '/api/_actions/x' } as H3Event)).toEqual({ serverError: 'An unexpected error occurred' })
+    expect(log).toHaveBeenCalledTimes(1)
+    log.mockRestore()
+  })
+})

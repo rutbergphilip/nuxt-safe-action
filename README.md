@@ -24,7 +24,7 @@ const action = createSafeActionClient()
   .errors({ EMAIL_TAKEN: 'This email is already registered' })
   .action(({ parsedInput, fail }) => {
     if (parsedInput.profile.email === 'taken@example.com') {
-      fail('EMAIL_TAKEN', { validationErrors: { 'profile.email': ['Use a different email'] } })
+      return fail('EMAIL_TAKEN', { validationErrors: { 'profile.email': ['Use a different email'] } })
     }
     return { profile: parsedInput.profile }
   })

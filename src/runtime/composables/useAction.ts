@@ -158,6 +158,9 @@ export function useAction<TInput, TOutput, TServerError = string, TBusinessError
       requests.delete(controller)
     }
 
+    // A run that owns state when it completes delivers its whole lifecycle: once
+    // onSuccess/onError fire, a reset() or new execution started from them only
+    // releases reactive state, not this run's refresh or onSettled.
     if (ownRevision === revision) {
       if (result.serverError !== undefined || result.validationErrors !== undefined || result.businessError !== undefined) {
         serverError.value = result.serverError
@@ -172,11 +175,11 @@ export function useAction<TInput, TOutput, TServerError = string, TBusinessError
         status.value = 'hasSucceeded'
         notify(options.onSuccess && (() => options.onSuccess!({ data: result.data as TOutput, input })))
       }
-      if (ownRevision === revision && result.serverError === undefined && result.validationErrors === undefined && result.businessError === undefined && options.invalidate && nuxtApp) {
+      if (result.serverError === undefined && result.validationErrors === undefined && result.businessError === undefined && options.invalidate && nuxtApp) {
         try {
           const keys = resolveQueryKeys(nuxtApp, options.invalidate)
           if (keys.length) {
-            isRefreshing.value = true
+            if (ownRevision === revision) isRefreshing.value = true
             await nuxtApp.runWithContext(() => refreshNuxtData(keys))
           }
         } catch (error) {
@@ -185,7 +188,7 @@ export function useAction<TInput, TOutput, TServerError = string, TBusinessError
           if (ownRevision === revision) isRefreshing.value = false
         }
       }
-      if (ownRevision === revision) notify(options.onSettled && (() => options.onSettled!({ result, input })))
+      notify(options.onSettled && (() => options.onSettled!({ result, input })))
     }
     return result
   }

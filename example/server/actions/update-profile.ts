@@ -11,7 +11,7 @@ export default createSafeActionClient()
   .action(async ({ parsedInput, fail }) => {
     await new Promise(resolve => setTimeout(resolve, 750))
     if (parsedInput.profile.email.toLowerCase() === 'taken@example.com') {
-      fail('EMAIL_TAKEN', { validationErrors: { 'profile.email': ['Use a different email'] } })
+      return fail('EMAIL_TAKEN', { validationErrors: { 'profile.email': ['Use a different email'] } })
     }
     if (parsedInput.profile.name.toLowerCase() === 'admin') {
       returnValidationErrors({ 'profile.name': ['This name is reserved'] })
